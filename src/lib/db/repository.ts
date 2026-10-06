@@ -1,0 +1,131 @@
+import "server-only";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { topicSchema, pulseSchema, type Topic, type Observation, type Pulse, type SourceStatus } from "@/lib/domain/schema";
+import { computeTrends, computeHotspots, HOUR } from "@/lib/trends/engine";
+import { topicSnapshot } from "@/lib/trends/snapshots";
+import { DataRepository, DAY, ITEM_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
+import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, type ItemRecord, type TopicRecord } from "./records";
+import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
+
+export type PublishOptions = {
+  items?: ItemRecord[];
+  topicRecords?: TopicRecord[];
+  runs?: Array<{ id: string; health: SourceStatus }>;
+};
+
+// Domain read models and the pipeline share this facade. Components never import it.
+export class Repository extends DataRepository {
+  async acquireLease(now: Date): Promise<string | null> {
+    z.date().parse(now);
+    const owner = randomUUID();
+    const result = await this.client.execute({ sql: "INSERT INTO leases(name,owner,expires_at) VALUES ('ingest',?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE leases.expires_at<=?",
+      args: [owner, now.getTime() + 120000, now.getTime()] });
+    return result.rowsAffected === 1 ? owner : null;
+  }
+  async releaseLease(owner: string) { await this.client.execute({ sql: "DELETE FROM leases WHERE name='ingest' AND owner=?", args: [owner] }); }
+
+  async load(now: Date, isFixture = false) {
+    z.date().parse(now); z.boolean().parse(isFixture);
+    const results = await this.client.batch([
+      { sql: "SELECT * FROM topics WHERE is_fixture=? ORDER BY slug", args: [Number(isFixture)] },
+      { sql: "SELECT * FROM items WHERE is_fixture=? AND published_at>=? AND published_at<=? ORDER BY published_at,id",
+        args: [Number(isFixture), new Date(now.getTime() - ITEM_RETENTION_DAYS * DAY).toISOString(), now.toISOString()] },
+    ], "read");
+    const topicRecords = (results[0]?.rows ?? []).map(topicFromRow);
+    const items = (results[1]?.rows ?? []).map(itemFromRow);
+    return { topics: topicRecords.map(toDomainTopic), observations: toObservations(items, topicRecords), topicRecords, items };
+  }
+
+  async publish(inputTopics: Topic[], observations: Observation[], inputPulse: Pulse, owner: string, now = new Date(), options: PublishOptions = {}): Promise<{ inserted: number; pulse: Pulse }> {
+    const template = pulseSchema.parse(inputPulse);
+    if (!template.generatedAt) throw new Error("A persisted snapshot requires a collection timestamp");
+    z.date().parse(now);
+    const captured = new Date(template.generatedAt), capturedAt = captured.toISOString(), isFixture = template.mode === "demo";
+    const topics = inputTopics.map((t) => topicSchema.parse(t));
+    return writeTransaction(this.client, async (tx) => {
+      const lease = await tx.execute({ sql: "SELECT owner FROM leases WHERE name='ingest' AND owner=? AND expires_at>?", args: [owner, now.getTime()] });
+      if (!lease.rows.length) throw new Error("INGESTION_LEASE_EXPIRED");
+      const existing = (await tx.execute({ sql: "SELECT * FROM topics WHERE is_fixture=?", args: [Number(isFixture)] })).rows.map(topicFromRow);
+      const bySlug = new Map(existing.map((t) => [t.slug, t]));
+      const proposed = (options.topicRecords ?? []).map((t) => topicRecordSchema.parse(t));
+      for (const t of topics) {
+        if (bySlug.has(t.slug)) continue;
+        const supplied = proposed.find((r) => r.slug === t.slug);
+        if (supplied && supplied.isFixture !== isFixture) throw new Error("TOPIC_DATASET_MISMATCH");
+        const times = observations.filter((o) => o.topicSlug === t.slug).map((o) => o.publishedAt).sort();
+        const record = supplied ?? topicRecordSchema.parse({ id: randomUUID(), slug: t.slug, canonicalLabel: t.title, category: t.category,
+          neighborhood: null, firstSeenAt: times[0] ?? capturedAt, lastSeenAt: times.at(-1) ?? capturedAt,
+          lifecycle: "inactive", pulseScore: 0, confidence: 0, summary: t.description, enrichmentMethod: t.method, isFixture });
+        await tx.execute(topicInsert(record)); bySlug.set(t.slug, record);
+      }
+      // Resolve temporary classification IDs against stable persisted topic IDs.
+      const proposedSlug = new Map(proposed.map((t) => [t.id, t.slug]));
+      const incoming = options.items ?? observations.map((o) => {
+        const topic = bySlug.get(o.topicSlug);
+        if (!topic) throw new Error("ITEM_TOPIC_MISSING");
+        return fromSignal(o, { topicId: topic.id, category: topic.category, neighborhood: o.neighborhood,
+          localRelevance: 1, enrichmentStatus: "completed", isFixture });
+      });
+      const inserts = incoming.map((input) => {
+        const item = itemRecordSchema.parse(input);
+        if (item.isFixture !== isFixture) throw new Error("ITEM_DATASET_MISMATCH");
+        const slug = item.topicId ? proposedSlug.get(item.topicId) : undefined;
+        const topic = slug ? bySlug.get(slug) : undefined;
+        return itemInsert(topic ? { ...item, topicId: topic.id, category: topic.category } : item);
+      });
+      const inserted = inserts.length ? (await tx.batch(inserts)).reduce((n, r) => n + r.rows.length, 0) : 0;
+      const rows = await tx.batch([
+        { sql: "SELECT * FROM topics WHERE is_fixture=? ORDER BY slug", args: [Number(isFixture)] },
+        { sql: "SELECT * FROM items WHERE is_fixture=? AND published_at>=? AND published_at<=? ORDER BY published_at,id",
+          args: [Number(isFixture), new Date(captured.getTime() - ITEM_RETENTION_DAYS * DAY).toISOString(), capturedAt] },
+      ]);
+      const storedTopics = (rows[0]?.rows ?? []).map(topicFromRow);
+      const storedItems = (rows[1]?.rows ?? []).map(itemFromRow);
+      const evidence = toObservations(storedItems, storedTopics);
+      const trends = computeTrends(storedTopics.map(toDomainTopic), evidence, captured);
+      const pulse = pulseSchema.parse({ ...template, generatedAt: capturedAt, trends, hotspots: computeHotspots(trends, captured),
+        totalSignals: evidence.filter((o) => Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR).length });
+      const parent = await tx.execute({ sql: "INSERT INTO pulse_snapshots(id,captured_at,mode,payload) VALUES (?,?,?,?) ON CONFLICT(mode,captured_at) DO UPDATE SET payload=excluded.payload RETURNING id",
+        args: [randomUUID(), capturedAt, pulse.mode, JSON.stringify(pulse)] });
+      const batchId = String(parent.rows[0]!.id);
+      const statements = [];
+      for (const t of storedTopics) {
+        const trend = trends.find((v) => v.slug === t.slug);
+        const items = storedItems.filter((i) => i.topicId === t.id);
+        const times = items.map((i) => i.publishedAt).sort();
+        const counts = new Map<string, number>();
+        for (const o of evidence.filter((o) => o.topicSlug === t.slug && Date.parse(o.publishedAt) > captured.getTime() - 3 * HOUR))
+          if (o.neighborhood) counts.set(o.neighborhood, (counts.get(o.neighborhood) ?? 0) + 1);
+        const neighborhood = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? t.neighborhood;
+        statements.push({ sql: "UPDATE topics SET first_seen_at=min(first_seen_at,?),last_seen_at=max(last_seen_at,?),neighborhood=?,lifecycle=?,pulse_score=?,confidence=? WHERE id=?",
+          args: [times[0] ?? t.firstSeenAt, times.at(-1) ?? t.lastSeenAt, neighborhood, trend?.lifecycle ?? "inactive", trend?.score ?? 0, trend?.confidence ?? 0, t.id] });
+        const recentEvidence = evidence.filter((o) => o.topicSlug === t.slug && Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR);
+        if (recentEvidence.length || t.lifecycle !== "inactive")
+          statements.push(snapshotInsert(topicSnapshot(t.id, recentEvidence, captured, trend, batchId)));
+      }
+      for (const completion of options.runs ?? []) {
+        const row = (await tx.execute({ sql: "SELECT * FROM ingestion_runs WHERE id=?", args: [completion.id] })).rows[0];
+        if (!row) throw new Error("INGESTION_RUN_MISSING");
+        const current = runFromRow(row), health = completion.health;
+        if (current.status !== "running" || current.source !== health.source || current.isFixture !== isFixture) throw new Error("INGESTION_RUN_MISMATCH");
+        const count = await tx.execute({ sql: "SELECT count(*) AS inserted FROM items WHERE ingestion_run_id=?", args: [current.id] });
+        const run = ingestionRunSchema.parse({ ...current, finishedAt: now.toISOString(), discovered: health.fetched,
+          inserted: Number(count.rows[0]!.inserted), duplicates: Math.max(0, health.accepted - Number(count.rows[0]!.inserted)),
+          errors: health.rejected + (health.status === "error" ? 1 : 0),
+          status: health.status === "error" ? "failed" : health.rejected ? "partial" : "completed",
+          errorMessage: health.error ?? (health.rejected ? "VALIDATION_REJECTED" : null) });
+        statements.push({ sql: "UPDATE ingestion_runs SET finished_at=?,discovered=?,inserted=?,duplicates=?,errors=?,status=?,error_message=? WHERE id=?",
+          args: [run.finishedAt, run.discovered, run.inserted, run.duplicates, run.errors, run.status, run.errorMessage, run.id] });
+      }
+      await tx.batch([...statements, ...retentionStatements(now)]);
+      return { inserted, pulse };
+    });
+  }
+
+  async latest(mode: Pulse["mode"] = "live"): Promise<Pulse | null> {
+    z.enum(["live", "demo"]).parse(mode);
+    const result = await this.client.execute({ sql: "SELECT payload FROM pulse_snapshots WHERE mode=? ORDER BY captured_at DESC,rowid DESC LIMIT 1", args: [mode] });
+    return result.rows[0] ? pulseSchema.parse(JSON.parse(String(result.rows[0].payload))) : null;
+  }
+}

@@ -1,0 +1,17 @@
+CREATE INDEX items_published_idx ON items(is_fixture, published_at DESC, id);
+CREATE INDEX items_topic_time_idx ON items(topic_id, published_at DESC);
+CREATE INDEX items_source_time_idx ON items(is_fixture, source, published_at DESC);
+CREATE INDEX items_neighborhood_time_idx ON items(is_fixture, neighborhood, published_at DESC) WHERE neighborhood IS NOT NULL;
+CREATE INDEX items_category_time_idx ON items(is_fixture, category, published_at DESC);
+CREATE INDEX items_enrichment_time_idx ON items(is_fixture, enrichment_status, collected_at);
+CREATE INDEX items_run_idx ON items(ingestion_run_id) WHERE ingestion_run_id IS NOT NULL;
+CREATE INDEX items_domain_time_idx ON items(is_fixture, domain, published_at DESC);
+CREATE INDEX topics_active_idx ON topics(is_fixture, lifecycle, pulse_score DESC, last_seen_at DESC);
+CREATE INDEX topics_category_idx ON topics(is_fixture, category, pulse_score DESC);
+CREATE INDEX topics_neighborhood_idx ON topics(is_fixture, neighborhood, last_seen_at DESC);
+CREATE INDEX topic_snapshots_capture_idx ON topic_snapshots(captured_at);
+CREATE INDEX topic_snapshots_batch_idx ON topic_snapshots(batch_id) WHERE batch_id IS NOT NULL;
+CREATE INDEX ingestion_runs_source_time_idx ON ingestion_runs(is_fixture, source, started_at DESC);
+CREATE INDEX ingestion_runs_finished_idx ON ingestion_runs(finished_at) WHERE finished_at IS NOT NULL;
+CREATE INDEX ingestion_runs_running_idx ON ingestion_runs(started_at) WHERE status = 'running';
+CREATE INDEX pulse_snapshots_capture_idx ON pulse_snapshots(mode, captured_at DESC);
