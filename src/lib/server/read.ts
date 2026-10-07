@@ -9,7 +9,7 @@ import { demoPulse } from "@/fixtures/demo";
 import { computeTrends, computeHotspots } from "@/lib/trends/engine";
 
 export function emptyPulse(now: Date, notice: string): Pulse {
-  return { version: "v1", mode: "live", generatedAt: null, evaluatedAt: now.toISOString(), status: "unavailable", stale: true,
+  return { version: "v2", mode: "live", generatedAt: null, evaluatedAt: now.toISOString(), status: "unavailable", stale: true,
     totalSignals: 0, trends: [], hotspots: [], notice,
     sources: sources.map((source) => ({ source, status: "unavailable", checkedAt: now.toISOString(), fetched: 0, accepted: 0, rejected: 0, durationMs: 0 })) };
 }

@@ -4,6 +4,8 @@
 
 A momentum detector for Bengaluru's public internet. GDELT, Bluesky public AppView and Hacker News Algolia feed a validated, deduplicated pipeline. A deterministic engine ranks rising topics; every score links to its evidence and component weights.
 
+Scoring v2 compares the current two hours with the previous two hours. Bounded velocity (40%), logarithmic volume (25%), source diversity (20%) and recency (15%) produce a 0–100 Pulse Score. Confidence is separate; duplicate, single-source and sparse-evidence guardrails prevent inflated momentum. Six deterministic lifecycle states and versioned ingestion snapshots make changes inspectable. All equations and thresholds are in [Trend algorithm](docs/trend-algorithm.md).
+
 ## Run
 
 Node.js 22.13 or later.
@@ -76,6 +78,8 @@ The repository saves new signals before enrichment, supplies topic IDs seen with
 | `GET /api/ingest` | Protected ingestion; 401 without bearer auth; 409 if busy or in demo mode |
 
 Responses have `Cache-Control: no-store`. Unavailable live reads return 503 and expose `generatedAt: null` when there is no readable collection. Stale health returns 503; stale data reads expose available evidence with explicit freshness metadata. Counts are sampled distinct observations, not readership, unique people or citywide activity.
+
+The current pulse contract is `version: "v2"`. Lifecycle filters accept `NEW`, `EMERGING`, `RISING`, `HOT`, `STABLE` and `COOLING`. Topic metrics include `current2h`, `previous2h`, `count6h`, `count24h`, `sourceCount`, `growthRatio`, `latestSignalAgeHours`, `firstSeenAt`, separate `confidence` and bounded `growthPercent`/`changeCapped`. Original count aliases now describe the two-hour comparison. Historical database rows retain their original scoring version and score.
 
 ## Architecture and stack
 

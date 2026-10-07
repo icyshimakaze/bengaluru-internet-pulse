@@ -1,11 +1,12 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { topicSchema, pulseSchema, type Topic, type Observation, type Pulse, type SourceStatus } from "@/lib/domain/schema";
-import { computeTrends, computeHotspots, HOUR } from "@/lib/trends/engine";
+import { topicSchema, pulseSchema, storedPulseSchema, type Topic, type Observation, type Pulse, type SourceStatus } from "@/lib/domain/schema";
+import { computeTrends, evaluateTopics, deduplicateEvidence, computeHotspots, HOUR } from "@/lib/trends/engine";
+import { upgradeLegacyPulse } from "@/lib/trends/compatibility";
 import { topicSnapshot } from "@/lib/trends/snapshots";
-import { DataRepository, DAY, ITEM_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
-import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, type ItemRecord, type TopicRecord } from "./records";
+import { DataRepository, DAY, ITEM_RETENTION_DAYS, SNAPSHOT_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
+import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, legacyLifecycle, type ItemRecord, type TopicRecord } from "./records";
 import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
 import { EnrichmentRepository, applyEnrichments } from "./enrichment-repository";
 import type { EnrichmentAssignment } from "@/lib/domain/enrichment";
@@ -87,8 +88,9 @@ export class Repository extends DataRepository {
       ]);
       const storedTopics = (rows[0]?.rows ?? []).map(topicFromRow);
       const storedItems = (rows[1]?.rows ?? []).map(itemFromRow);
-      const evidence = toObservations(storedItems, storedTopics);
+      const evidence = deduplicateEvidence(toObservations(storedItems, storedTopics), captured);
       const trends = computeTrends(storedTopics.map(toDomainTopic), evidence, captured);
+      const metrics = new Map(evaluateTopics(storedTopics.map(toDomainTopic), evidence, captured).map((t) => [t.slug, t]));
       const pulse = pulseSchema.parse({ ...template, generatedAt: capturedAt, trends, hotspots: computeHotspots(trends, captured),
         totalSignals: evidence.filter((o) => Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR).length });
       if (pulse.enrichment) {
@@ -107,18 +109,19 @@ export class Repository extends DataRepository {
       const batchId = String(parent.rows[0]!.id);
       const statements = [];
       for (const t of storedTopics) {
-        const trend = trends.find((v) => v.slug === t.slug);
+        const metric = metrics.get(t.slug)!;
         const items = storedItems.filter((i) => i.topicId === t.id);
         const times = items.map((i) => i.publishedAt).sort();
         const counts = new Map<string, number>();
-        for (const o of evidence.filter((o) => o.topicSlug === t.slug && Date.parse(o.publishedAt) > captured.getTime() - 3 * HOUR))
+        for (const o of evidence.filter((o) => o.topicSlug === t.slug && Date.parse(o.publishedAt) > captured.getTime() - 2 * HOUR))
           if (o.neighborhood) counts.set(o.neighborhood, (counts.get(o.neighborhood) ?? 0) + 1);
         const neighborhood = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? t.neighborhood;
-        statements.push({ sql: "UPDATE topics SET first_seen_at=min(first_seen_at,?),last_seen_at=max(last_seen_at,?),neighborhood=?,lifecycle=?,pulse_score=?,confidence=? WHERE id=?",
-          args: [times[0] ?? t.firstSeenAt, times.at(-1) ?? t.lastSeenAt, neighborhood, trend?.lifecycle ?? "inactive", trend?.score ?? 0, trend?.confidence ?? 0, t.id] });
-        const recentEvidence = evidence.filter((o) => o.topicSlug === t.slug && Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR);
-        if (recentEvidence.length || t.lifecycle !== "inactive")
-          statements.push(snapshotInsert(topicSnapshot(t.id, recentEvidence, captured, trend, batchId)));
+        const state = metric.current2h ? metric.lifecycle : "inactive";
+        statements.push({ sql: "UPDATE topics SET first_seen_at=min(first_seen_at,?),last_seen_at=max(last_seen_at,?),neighborhood=?,lifecycle=?,lifecycle_v2=?,pulse_score=?,confidence=? WHERE id=?",
+          args: [times[0] ?? t.firstSeenAt, times.at(-1) ?? t.lastSeenAt, neighborhood, legacyLifecycle(state), state, metric.score, metric.confidence, t.id] });
+        const topicEvidence = evidence.filter((o) => o.topicSlug === t.slug);
+        if (Date.parse(t.lastSeenAt) >= captured.getTime() - SNAPSHOT_RETENTION_DAYS * DAY || topicEvidence.length)
+          statements.push(snapshotInsert(topicSnapshot(t.id, topicEvidence, captured, metric, batchId, toDomainTopic(t))));
       }
       for (const completion of options.runs ?? []) {
         const row = (await tx.execute({ sql: "SELECT * FROM ingestion_runs WHERE id=?", args: [completion.id] })).rows[0];
@@ -142,6 +145,10 @@ export class Repository extends DataRepository {
   async latest(mode: Pulse["mode"] = "live"): Promise<Pulse | null> {
     z.enum(["live", "demo"]).parse(mode);
     const result = await this.client.execute({ sql: "SELECT payload FROM pulse_snapshots WHERE mode=? ORDER BY captured_at DESC,rowid DESC LIMIT 1", args: [mode] });
-    return result.rows[0] ? pulseSchema.parse(JSON.parse(String(result.rows[0].payload))) : null;
+    if (!result.rows[0]) return null;
+    const parsed = storedPulseSchema.parse(JSON.parse(String(result.rows[0].payload)));
+    if (parsed.version === "v2") return parsed;
+    const data = await this.load(new Date(parsed.generatedAt ?? parsed.evaluatedAt), mode === "demo");
+    return upgradeLegacyPulse(parsed, data.topics, data.observations);
   }
 }

@@ -28,8 +28,8 @@ export function demoDataset(now = FIXTURE_NOW): { topics: Topic[]; observations:
         if (signal) observations.push({ ...signal, topicSlug: def.slug, neighborhood: i % 4 === 0 ? null : def.neighborhood });
       }
     };
-    add(def.current, 0.05, 2.8, "current");
-    add(def.baseline, 3.1, 2.7, "baseline");
+    add(def.current, 0.05, 1.8, "current");
+    add(def.baseline, 2.1, 1.7, "baseline");
     add(12 + topicIndex * 2, 6.1, 17.7, "history");
   }
   return { topics, observations };
@@ -37,7 +37,7 @@ export function demoDataset(now = FIXTURE_NOW): { topics: Topic[]; observations:
 export function demoPulse(now: Date): Pulse {
   const { topics, observations } = demoDataset(now);
   const trends = computeTrends(topics, observations, now);
-  return { version: "v1", mode: "demo", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false, status: "demo",
+  return { version: "v2", mode: "demo", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false, status: "demo",
     trends, hotspots: computeHotspots(trends, now), totalSignals: observations.length,
     sources: sources.map((source) => ({ source, status: "demo", fetched: observations.filter((o) => o.source === source).length, accepted: observations.filter((o) => o.source === source).length, rejected: 0, durationMs: 0, checkedAt: now.toISOString() })),
     notice: "Demo mode · fictional example signals. Live collection is available when a database and ingestion schedule are configured." };

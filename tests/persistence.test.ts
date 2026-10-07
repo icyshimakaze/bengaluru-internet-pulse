@@ -5,7 +5,7 @@ import { fromSignal } from "@/lib/db/mapping";
 import { DAY } from "@/lib/db/data-repository";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { seedFixtures } from "@/lib/db/seed";
-import { computeTrends, HOUR } from "@/lib/trends/engine";
+import { evaluateTopics, HOUR } from "@/lib/trends/engine";
 import type { ItemRecord } from "@/lib/db/records";
 
 const at = (days: number) => new Date(now.getTime() - days * DAY);
@@ -77,15 +77,16 @@ describe("typed relational repositories", () => {
   it("records exact 2h/previous 2h/6h/24h boundaries and upserts ordered history", async () => {
     const { repo, record } = await setup();
     const evidence = [0, 2, 3, 4, 6, 24, 24.01, -0.1].map((age, i) => observation("window-" + i, age));
-    const trend = computeTrends([topic], evidence, now)[0]!;
+    const trend = evaluateTopics([topic], evidence, now)[0]!;
     const snapshot = topicSnapshot(record.id, evidence, now, trend);
     expect(snapshot).toMatchObject({ count2h: 1, previousCount2h: 2, count6h: 4, count24h: 6, sourceCount: 1, count3h: 2, previousCount3h: 2, pulseScore: trend.score });
-    await repo.saveSnapshots([snapshot, { ...snapshot, capturedAt: at(1).toISOString() }]);
-    await repo.saveSnapshots([{ ...snapshot, pulseScore: 42 }]);
+    const older = topicSnapshot(record.id, evidence.map((o) => ({ ...o, publishedAt: new Date(Date.parse(o.publishedAt) - DAY).toISOString(), collectedAt: new Date(Date.parse(o.collectedAt) - DAY).toISOString() })), at(1));
+    await repo.saveSnapshots([snapshot, older]);
+    await repo.saveSnapshots([{ ...snapshot, pulseScore: 19 }]);
     const history = await repo.fetchTopicHistory(record.id);
     expect(history).toHaveLength(2);
     expect(history.map((s) => s.capturedAt)).toEqual([at(1).toISOString(), now.toISOString()]);
-    expect(history[1]?.pulseScore).toBe(42);
+    expect(history[1]?.pulseScore).toBe(19);
     expect(await repo.fetchTopicHistory(record.id, { since: now, until: now, limit: 1 })).toHaveLength(1);
   });
   it("tracks terminal ingestion counters and recovers interrupted runs", async () => {

@@ -88,7 +88,7 @@ export async function ingest(options: Options = {}): Promise<{ skipped: boolean;
     const complete = health.filter((s) => s.status === "ok" || s.status === "demo").length;
     const available = health.filter((s) => s.status === "ok" || s.status === "demo" || s.status === "partial").length;
     const template: Pulse = {
-      version: "v1", mode: isFixture ? "demo" : "live", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false,
+      version: "v2", mode: isFixture ? "demo" : "live", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false,
       status: isFixture ? "demo" : complete === 3 ? "healthy" : available > 0 ? "degraded" : "unavailable",
       trends: [], hotspots: [], sources: health, totalSignals: 0,
       enrichment: { provider: assignments.length && assignments.every((a) => a.provider === "mock") ? "mock" : enrichmentMode, pending: 0, completed: 0, irrelevant: 0 },

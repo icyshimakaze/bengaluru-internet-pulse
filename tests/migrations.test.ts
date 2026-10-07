@@ -3,6 +3,7 @@ import { testRepository } from "./database";
 import { loadMigrations, migrate } from "@/lib/db/schema";
 import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { now } from "./helpers";
+import { legacyLifecycle } from "@/lib/db/records";
 
 const legacySql = `
   CREATE TABLE topics(slug TEXT PRIMARY KEY,payload TEXT NOT NULL);
@@ -16,8 +17,8 @@ const legacySql = `
 describe("versioned SQL migrations", () => {
   it("creates relational tables, required fields, indexes, foreign keys and an immutable ledger", async () => {
     const repo = testRepository();
-    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4], version: 4 });
-    expect(await repo.initialize()).toEqual({ applied: [], version: 4 });
+    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4, 5], version: 5 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 5 });
     const expected = {
       items: ["id", "source", "source_id", "canonical_url", "title", "excerpt", "domain", "published_at", "collected_at", "content_fingerprint", "topic_id", "category", "neighborhood", "local_relevance", "enrichment_status"],
       topics: ["id", "slug", "canonical_label", "category", "neighborhood", "first_seen_at", "last_seen_at", "lifecycle", "pulse_score", "confidence", "summary"],
@@ -30,17 +31,17 @@ describe("versioned SQL migrations", () => {
     }
     expect((await repo.client.execute("SELECT * FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")).rows.length).toBeGreaterThanOrEqual(17);
     expect((await repo.client.execute("PRAGMA foreign_key_list(items)")).rows).toHaveLength(2);
-    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(4);
+    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(5);
     const edited = loadMigrations().map((m, i) => i ? m : { ...m, sql: m.sql + "\n-- edited" });
     await expect(migrate(repo.client, edited)).rejects.toThrow("has changed");
   });
   it("rolls back failed DDL without recording it and can retry a corrected migration", async () => {
     const repo = testRepository(); await repo.initialize();
-    const migration = { version: 5, name: "0005_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
+    const migration = { version: 6, name: "0006_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
     await expect(migrate(repo.client, [...loadMigrations(), migration])).rejects.toThrow();
     expect((await repo.client.execute("SELECT name FROM sqlite_master WHERE name='rollback_probe'")).rows).toHaveLength(0);
-    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(4);
-    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [5], version: 5 });
+    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(5);
+    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [6], version: 6 });
     await expect(repo.initialize()).rejects.toThrow("Unsupported migration history");
   });
   it("rejects out-of-order versions and missing ledger entries", async () => {
@@ -51,7 +52,8 @@ describe("versioned SQL migrations", () => {
     await expect(repo.initialize()).rejects.toThrow("Unsupported migration history");
   });
   it("preserves legacy provenance, topics and latest repeated-capture snapshots", async () => {
-    const repo = testRepository(), dataset = demoDataset(now), demo = demoPulse(now);
+    const repo = testRepository(), dataset = demoDataset(now), current = demoPulse(now);
+    const demo = { ...current, version: "v1", trends: current.trends.map((t) => ({ ...t, lifecycle: legacyLifecycle(t.lifecycle) })) };
     const live = { ...demo, mode: "live", status: "healthy" };
     await repo.client.executeMultiple(legacySql);
     await repo.client.batch([
@@ -66,8 +68,9 @@ describe("versioned SQL migrations", () => {
     const restored = await repo.load(now);
     expect(restored.observations).toHaveLength(dataset.observations.length);
     expect(restored.observations).toEqual(expect.arrayContaining(dataset.observations));
-    expect(restored.topics).toEqual(expect.arrayContaining(dataset.topics));
-    expect((await repo.latest())?.notice).toBe("Latest repeated capture");
+    for (const t of dataset.topics) expect(restored.topics).toContainEqual(expect.objectContaining(t));
+    expect((await repo.latest())?.notice).toContain("Latest repeated capture");
+    expect((await repo.latest())?.version).toBe("v2");
     expect((await repo.latest("demo"))?.mode).toBe("demo");
     expect((await repo.load(now, true)).items).toHaveLength(221);
     expect(await repo.fetchTopicHistory(restored.topicRecords[0]!.id)).toHaveLength(1);
@@ -75,7 +78,7 @@ describe("versioned SQL migrations", () => {
     expect(tables).not.toContain("observations");
     expect(tables).not.toContain("legacy_topics");
     expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
-    expect(await repo.initialize()).toEqual({ applied: [], version: 4 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 5 });
   });
   it("leaves the original legacy schema and rows intact if backfill validation fails", async () => {
     const repo = testRepository();

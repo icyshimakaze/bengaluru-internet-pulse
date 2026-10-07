@@ -18,10 +18,13 @@ export const coordinates: Record<Neighborhood, [number, number]> = {
   Jayanagar: [12.9250, 77.5938], Marathahalli: [12.9591, 77.6974], "HSR Layout": [12.9116, 77.6389], "MG Road": [12.9756, 77.6066],
 };
 export const slugSchema = z.string().min(1).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const lifecycles = ["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"] as const;
+export const trendLifecycleSchema = z.enum(lifecycles);
 export const httpUrlSchema = z.url().refine((value) => /^https?:\/\//.test(value), "Only HTTP(S) URLs are allowed");
 export const topicSchema = z.object({
   slug: slugSchema, title: z.string().min(3).max(100), category: categorySchema,
   description: z.string().min(1).max(280), method: z.enum(["rules", "ai"]),
+  firstSeenAt: z.iso.datetime().nullable().optional(),
 });
 export type Topic = z.infer<typeof topicSchema>;
 export const normalizedSignalSchema = z.object({
@@ -58,7 +61,7 @@ export const sourceStatusSchema = z.object({
   duplicates: z.number().int().nonnegative().optional(),
 });
 export type SourceStatus = z.infer<typeof sourceStatusSchema>;
-export const trendSchema = topicSchema.extend({
+export const legacyTrendSchema = topicSchema.extend({
   score: z.number().min(0).max(100), currentCount: z.number().int().nonnegative(),
   baselineCount: z.number().int().nonnegative(), totalCount: z.number().int().nonnegative(),
   growthPercent: z.number(), velocity: z.number().min(0).max(1), volume: z.number().min(0).max(1),
@@ -68,11 +71,19 @@ export const trendSchema = topicSchema.extend({
   history: z.array(z.object({ at: z.iso.datetime(), count: z.number().int().nonnegative() })),
   evidence: z.array(observationSchema),
 });
+export const trendSchema = legacyTrendSchema.omit({ lifecycle: true }).extend({
+  lifecycle: trendLifecycleSchema, current2h: z.number().int().nonnegative(), previous2h: z.number().int().nonnegative(),
+  count6h: z.number().int().nonnegative(), count24h: z.number().int().nonnegative(), sourceCount: z.number().int().min(0).max(3),
+  growthRatio: z.number().positive(), growthPercent: z.number().min(-100).max(300), changeCapped: z.boolean(),
+  latestAt: z.iso.datetime().nullable(), latestSignalAgeHours: z.number().nonnegative().nullable(), firstSeenAt: z.iso.datetime().nullable(),
+  clusterConsistency: z.number().min(0).max(1), evidenceConfidence: z.number().min(0).max(1),
+  diversityConfidence: z.number().min(0).max(1), sourceBalance: z.number().min(0).max(1), scoreCap: z.number().int().min(0).max(100),
+});
 export type Trend = z.infer<typeof trendSchema>;
 export const hotspotSchema = z.object({ neighborhood: neighborhoodSchema, lat: z.number(), lng: z.number(), count: z.number().int().nonnegative(), topics: z.array(slugSchema) });
 export type Hotspot = z.infer<typeof hotspotSchema>;
 export const pulseSchema = z.object({
-  version: z.literal("v1"), mode: z.enum(["demo", "live"]), generatedAt: z.iso.datetime().nullable(), evaluatedAt: z.iso.datetime(),
+  version: z.literal("v2"), mode: z.enum(["demo", "live"]), generatedAt: z.iso.datetime().nullable(), evaluatedAt: z.iso.datetime(),
   stale: z.boolean(), status: z.enum(["demo", "healthy", "degraded", "unavailable"]),
   trends: z.array(trendSchema), hotspots: z.array(hotspotSchema), sources: z.array(sourceStatusSchema),
   totalSignals: z.number().int().nonnegative(), notice: z.string().nullable(),
@@ -80,3 +91,5 @@ export const pulseSchema = z.object({
     completed: z.number().int().nonnegative(), irrelevant: z.number().int().nonnegative() }).optional(),
 });
 export type Pulse = z.infer<typeof pulseSchema>;
+export const legacyPulseSchema = pulseSchema.extend({ version: z.literal("v1"), trends: z.array(legacyTrendSchema) });
+export const storedPulseSchema = z.discriminatedUnion("version", [legacyPulseSchema, pulseSchema]);

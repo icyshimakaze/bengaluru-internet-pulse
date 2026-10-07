@@ -1,22 +1,23 @@
 # Validation record
 
-Scaffold verified on 6 October 2026; relational persistence, public-source ingestion and semantic enrichment verified on 7 October 2026, Windows, Node.js 26.8.1. CI is configured for Node.js 22, with the project requiring 22.13 or later.
+Scaffold verified on 6 October 2026; relational persistence, public-source ingestion and semantic enrichment verified on 7 October 2026; production scoring v2 verified on 8 October 2026, Windows, Node.js 26.8.1. CI is configured for Node.js 22, with the project requiring 22.13 or later.
 
 - `npm install` and clean `npm ci --no-audit --no-fund`: successful; generated lockfile checked for dependency consistency.
 - `npm run lint`: passed with zero lint warnings or errors.
-- `npm test`: 117 tests passed in 11 files.
+- `npm test`: 140 tests passed in 12 files.
 - `npm run typecheck`: passed with strict TypeScript and unchecked-index protection.
 - `npm run build`: production build passed with all pages and API routes.
 - `npm run test:e2e`: 4 tests passed against production servers in demo and unconfigured live modes.
 - Automated WCAG A/AA checks: no violations found on `/`, `/topic/namma-metro` and `/about` at 390px width. This is automated verification, not a complete accessibility certification.
 - Desktop/mobile screenshots reviewed for overflow, typography, labels, source coverage, ranking and evidence. The charts expose a keyboard-accessible data table; decorative chart surfaces are removed from tab order.
-- `npm run db:migrate`: applied migration 4 to the existing version 3 local database, preserving prior migration checksums and data; repeat execution is covered by integration tests.
-- `npm run db:seed`: inserted 221 fictional items and six topics in isolated `.data/seed.db`; repeat run inserted zero items.
+- `npm run db:migrate`: applied migration 5 to the existing version 4 local database; repeat execution applied no migrations. Integration tests preserve original migration checksums, evidence, v1 scores and capture guards while permitting v2 history at the same timestamp.
+- `npm run db:seed`: retained 221 fictional items and six topics in isolated `.data/seed.db`; rerun inserted zero items. Direct integrity inspection confirmed six preserved v1 history rows, six v2 rows and zero foreign-key violations.
 - Persistence coverage includes legacy backfill, migration rollback/checksums, all duplicate identities, assignment, filtered queries, hotspot aggregation, atomic publication, run counters and interruption recovery, exact time-window and 14/30-day retention boundaries and fixture isolation.
-- Production ingestion output tracing includes all four SQL migration files.
+- Production ingestion output tracing includes all five SQL migration files. Browser static bundles contain no server API key names or OpenAI endpoint.
 - `npm run ingest -- --fixtures`: three fictional signals inserted using all three real adapters with injected payloads; repeat inserted zero. Data is confined to marked rows in `.data/ingestion-fixtures.db`.
 - Source reliability coverage includes all requested queries/windows/caps, normalized fields/source types, profile removal, original-source links, syndicated fingerprints, repeated-query identities, retry/permanent HTTP errors, rate-limit delays, response-size limits, stalled fetch/body deadlines, partial coverage and complete outages.
 - Enrichment coverage uses mocked Responses API results and the offline mock provider: exact production model and strict schema, untrusted-input separation, no tools/response storage, batching, updated active catalogs, invalid IDs/categories/locations/summaries, refusals/incomplete results, transient retry limits, total deadlines, durable pending fallback, cooldowns, three-run caps, queue draining, no repeated successful enrichment, migration upgrades, validated persisted reads and cascading retention. Classification confidence is verified independently from deterministic trend confidence.
+- Scoring coverage includes rising-small versus large-stable ordering, exact 2h/6h/24h boundaries, the four weighted components, evidence caps, singleton exclusion, single-source spam, syndicated and transitive duplicates, missing baselines, bounded small-denominator percentages, provider balance, cluster consistency, all six lifecycles, stale/no-data cases, first-seen preservation, deterministic ties and input-order invariance. Relational tests validate v2 telemetry, read-only legacy cache upgrades, version-specific upserts and snapshots for isolated, expired and pruned-evidence topics. Browser checks verify the v2 API contract.
 
 ## Live smoke test
 
@@ -84,8 +85,8 @@ bengaluru-internet-pulse/
 │       │   ├── client.ts, schema.ts, legacy-v1.ts
 │       │   ├── records.ts, mapping.ts, data-repository.ts, repository.ts, enrichment-repository.ts
 │       │   ├── seed.ts
-│       │   └── migrations/0001_core.sql, 0002_indexes.sql, 0003_dataset_guards.sql, 0004_semantic_enrichment.sql
-│       ├── trends/engine.ts, snapshots.ts
+│       │   └── migrations/0001_core.sql, 0002_indexes.sql, 0003_dataset_guards.sql, 0004_semantic_enrichment.sql, 0005_trend_scoring_v2.sql
+│       ├── trends/engine.ts, snapshots.ts, compatibility.ts, presentation.ts
 │       ├── server/env.ts, logger.ts, read.ts, api.ts, auth.ts
 │       └── utils.ts
 ├── tests/
@@ -93,7 +94,7 @@ bengaluru-internet-pulse/
 │   ├── sources.test.ts, ingest.test.ts, server.test.ts
 │   ├── api.test.ts, ai.test.ts
 │   ├── migrations.test.ts, persistence.test.ts
-│   ├── enrichment-persistence.test.ts
+│   ├── enrichment-persistence.test.ts, scoring-persistence.test.ts
 │   ├── helpers.ts, database.ts, server-only.ts
 │   └── e2e/product.spec.ts
 ├── package.json, package-lock.json

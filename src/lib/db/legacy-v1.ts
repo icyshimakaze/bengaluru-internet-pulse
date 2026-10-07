@@ -1,8 +1,8 @@
 import "server-only";
 import type { Transaction, InStatement } from "@libsql/client";
-import { topicSchema, observationSchema, pulseSchema, type Observation } from "@/lib/domain/schema";
+import { topicSchema, observationSchema, legacyPulseSchema as pulseSchema, type Observation } from "@/lib/domain/schema";
 import { topicInsert, itemInsert, fromSignal, snapshotInsert } from "./mapping";
-import type { TopicRecord } from "./records";
+import { lifecycleSchema, type TopicRecord } from "./records";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 
 // This adapter belongs to migration 0001. Keep its v1 input contracts stable.
@@ -41,10 +41,10 @@ export async function backfillLegacy(tx: Transaction, now: Date): Promise<void> 
     for (const record of catalog.values()) if (record.isFixture === fixture) { record.lifecycle = "inactive"; record.pulseScore = 0; record.confidence = 0; }
     for (const t of pulse.trends) {
       const record = catalog.get(catalogKey(t.slug, fixture))!;
-      record.lifecycle = t.lifecycle; record.pulseScore = t.score; record.confidence = t.confidence;
+      record.lifecycle = lifecycleSchema.parse(t.lifecycle); record.pulseScore = t.score; record.confidence = t.confidence;
     }
   }
-  const statements: InStatement[] = [...catalog.values()].map(topicInsert);
+  const statements: InStatement[] = [...catalog.values()].map((t) => topicInsert(t, { legacy: true }));
   for (const o of observations) {
     const topic = catalog.get(catalogKey(o.topicSlug, false));
     if (!topic) throw new Error("Legacy item references a missing topic");
@@ -55,7 +55,10 @@ export async function backfillLegacy(tx: Transaction, now: Date): Promise<void> 
     statements.push({ sql: "INSERT INTO pulse_snapshots(id,captured_at,mode,payload) VALUES (?,?,?,?)", args: [id, pulse.generatedAt!, pulse.mode, JSON.stringify(pulse)] });
     for (const t of pulse.trends) {
       const record = catalog.get(catalogKey(t.slug, fixture))!;
-      statements.push(snapshotInsert(topicSnapshot(record.id, t.evidence, new Date(pulse.generatedAt!), t, id)));
+      const counts = topicSnapshot(record.id, t.evidence, new Date(pulse.generatedAt!), undefined, id);
+      statements.push(snapshotInsert({ ...counts, velocityScore: t.velocity, volumeScore: t.volume, diversityScore: t.diversity,
+        recencyScore: t.recency, confidence: t.confidence, pulseScore: t.score, count3h: t.currentCount, previousCount3h: t.baselineCount,
+        scoringSourceCount: t.sources.length, lifecycle: lifecycleSchema.parse(t.lifecycle), algorithmVersion: "v1" }, { legacy: true }));
       if (fixture) for (const o of t.evidence) statements.push(itemInsert(fromSignal({ ...o, id: "legacy-fixture-" + o.id },
         { topicId: record.id, category: record.category, neighborhood: o.neighborhood, localRelevance: 1, enrichmentStatus: "completed", isFixture: true })));
     }

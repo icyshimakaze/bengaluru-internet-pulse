@@ -124,7 +124,7 @@ describe("durable semantic enrichment queue", () => {
     const signal = observation("existing", 1), item = fromSignal(signal);
     await repo.insertItem(item);
     const checksums = (await repo.client.execute("SELECT checksum FROM schema_migrations ORDER BY version")).rows;
-    expect(await repo.initialize()).toEqual({ applied: [4], version: 4 });
+    expect(await repo.initialize()).toEqual({ applied: [4, 5], version: 5 });
     expect((await repo.load(now)).items).toEqual([item]);
     expect((await repo.client.execute("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")).rows).toEqual(checksums);
     expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows[0]?.enrichment_attempts).toBe(0);

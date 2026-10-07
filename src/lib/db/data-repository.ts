@@ -4,7 +4,7 @@ import type { Client, Transaction, InStatement } from "@libsql/client";
 import { z } from "zod";
 import { categorySchema, neighborhoodSchema, sourceSchema, coordinates, hotspotSchema, type Source, type Hotspot } from "@/lib/domain/schema";
 import { itemRecordSchema, itemFieldsSchema, topicRecordSchema, topicFieldsSchema, topicUpdateSchema, snapshotRecordSchema, ingestionRunSchema, enrichmentStatusSchema,
-  type ItemRecord, type TopicRecord, type TopicUpdate, type SnapshotRecord, type IngestionRun, type DuplicateMatch } from "./records";
+  legacyLifecycle, type ItemRecord, type TopicRecord, type TopicUpdate, type SnapshotRecord, type IngestionRun, type DuplicateMatch } from "./records";
 import { itemFromRow, topicFromRow, snapshotFromRow, runFromRow, itemInsert, topicInsert, snapshotInsert, touchTopic } from "./mapping";
 import { migrate } from "./schema";
 
@@ -110,8 +110,8 @@ export class DataRepository {
       if (!row) return null;
       const t = topicRecordSchema.parse({ ...topicFromRow(row), ...patch });
       await tx.batch([
-        { sql: `UPDATE topics SET slug=?,canonical_label=?,category=?,neighborhood=?,first_seen_at=?,last_seen_at=?,lifecycle=?,pulse_score=?,confidence=?,summary=?,enrichment_method=? WHERE id=?`,
-          args: [t.slug, t.canonicalLabel, t.category, t.neighborhood, t.firstSeenAt, t.lastSeenAt, t.lifecycle, t.pulseScore, t.confidence, t.summary, t.enrichmentMethod, id] },
+        { sql: `UPDATE topics SET slug=?,canonical_label=?,category=?,neighborhood=?,first_seen_at=?,last_seen_at=?,lifecycle=?,lifecycle_v2=?,pulse_score=?,confidence=?,summary=?,enrichment_method=? WHERE id=?`,
+          args: [t.slug, t.canonicalLabel, t.category, t.neighborhood, t.firstSeenAt, t.lastSeenAt, legacyLifecycle(t.lifecycle), t.lifecycle, t.pulseScore, t.confidence, t.summary, t.enrichmentMethod, id] },
         { sql: "UPDATE items SET category=? WHERE topic_id=?", args: [t.category, id] },
       ]);
       return t;
@@ -137,8 +137,8 @@ export class DataRepository {
 
   async listActiveTopics(input: { now?: Date; category?: TopicRecord["category"]; neighborhood?: TopicRecord["neighborhood"]; limit?: number; isFixture?: boolean } = {}): Promise<TopicRecord[]> {
     const q = z.object({ now: z.date().default(() => new Date()), category: categorySchema.optional(), neighborhood: neighborhoodSchema.nullable().optional(), limit: limit.default(100), isFixture: fixture }).parse(input);
-    const filters = ["t.is_fixture=?", "t.lifecycle<>'inactive'", "(SELECT count(*) FROM items i WHERE i.topic_id=t.id AND i.local_relevance>=0.5 AND i.enrichment_status='completed' AND i.published_at>? AND i.published_at<=?)>=2"];
-    const args: Array<string | number | null> = [Number(q.isFixture), new Date(q.now.getTime() - 3 * 3600000).toISOString(), iso(q.now)];
+    const filters = ["t.is_fixture=?", "coalesce(t.lifecycle_v2,t.lifecycle)<>'inactive'", "(SELECT count(*) FROM items i WHERE i.topic_id=t.id AND i.local_relevance>=0.5 AND i.enrichment_status='completed' AND i.published_at>? AND i.published_at<=?)>=2"];
+    const args: Array<string | number | null> = [Number(q.isFixture), new Date(q.now.getTime() - 2 * 3600000).toISOString(), iso(q.now)];
     if (q.category) { filters.push("t.category=?"); args.push(q.category); }
     if (q.neighborhood !== undefined) { filters.push("t.neighborhood IS ?"); args.push(q.neighborhood); }
     const result = await this.client.execute({ sql: `SELECT t.* FROM topics t WHERE ${filters.join(" AND ")} ORDER BY t.pulse_score DESC,
@@ -148,7 +148,7 @@ export class DataRepository {
 
   async saveSnapshots(snapshots: SnapshotRecord[]): Promise<void> {
     const valid = snapshots.map((s) => snapshotRecordSchema.parse(s));
-    if (valid.length) await writeBatch(this.client, valid.map(snapshotInsert));
+    if (valid.length) await writeBatch(this.client, valid.map((s) => snapshotInsert(s)));
   }
 
   async fetchTopicHistory(topicId: string, input: { since?: Date; until?: Date; limit?: number } = {}): Promise<SnapshotRecord[]> {
@@ -158,7 +158,7 @@ export class DataRepository {
     const filters = ["topic_id=?"], args: Array<string | number> = [topicId];
     if (q.since) { filters.push("captured_at>=?"); args.push(iso(q.since)); }
     if (q.until) { filters.push("captured_at<=?"); args.push(iso(q.until)); }
-    const result = await this.client.execute({ sql: `SELECT * FROM topic_snapshots WHERE ${filters.join(" AND ")} ORDER BY captured_at DESC LIMIT ?`, args: [...args, q.limit] });
+    const result = await this.client.execute({ sql: `SELECT * FROM topic_snapshots WHERE ${filters.join(" AND ")} ORDER BY captured_at DESC,algorithm_version DESC LIMIT ?`, args: [...args, q.limit] });
     return result.rows.map(snapshotFromRow).reverse();
   }
 

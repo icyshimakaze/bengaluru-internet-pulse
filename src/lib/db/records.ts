@@ -1,12 +1,20 @@
 import "server-only";
 import { z } from "zod";
-import { categorySchema, neighborhoodSchema, sourceSchema, httpUrlSchema, slugSchema } from "@/lib/domain/schema";
+import { categorySchema, neighborhoodSchema, sourceSchema, httpUrlSchema, slugSchema, trendLifecycleSchema } from "@/lib/domain/schema";
 
 const timestamp = z.iso.datetime().transform((value) => new Date(value).toISOString());
 const id = z.string().min(1).max(200);
 const factor = z.number().min(0).max(1);
 const count = z.number().int().nonnegative();
-export const lifecycleSchema = z.enum(["emerging", "rising", "steady", "cooling", "inactive"]);
+export const legacyLifecycleSchema = z.enum(["emerging", "rising", "steady", "cooling", "inactive"]);
+export function normalizeLifecycle(value: unknown) {
+  const legacy: Record<string, string> = { emerging: "EMERGING", rising: "RISING", steady: "STABLE", cooling: "COOLING" };
+  return typeof value === "string" ? legacy[value] ?? value : value;
+}
+export const lifecycleSchema = z.preprocess(normalizeLifecycle, z.union([trendLifecycleSchema, z.literal("inactive")]));
+export function legacyLifecycle(value: z.infer<typeof lifecycleSchema>): z.infer<typeof legacyLifecycleSchema> {
+  return value === "NEW" || value === "HOT" || value === "EMERGING" ? "emerging" : value === "RISING" ? "rising" : value === "COOLING" ? "cooling" : value === "STABLE" ? "steady" : "inactive";
+}
 export const enrichmentStatusSchema = z.enum(["pending", "completed", "irrelevant", "failed"]);
 export const itemFieldsSchema = z.object({
   id, source: sourceSchema, sourceId: z.string().min(1), canonicalUrl: httpUrlSchema, originalUrl: httpUrlSchema,
@@ -34,8 +42,14 @@ export const snapshotRecordSchema = z.object({
   topicId: id, capturedAt: timestamp, count2h: count, previousCount2h: count, count6h: count, count24h: count,
   sourceCount: count.max(3), velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor,
   confidence: factor, pulseScore: z.number().int().min(0).max(100), lifecycle: lifecycleSchema,
-  count3h: count, previousCount3h: count, scoringSourceCount: count.max(3), algorithmVersion: z.literal("v1"), batchId: id.nullable(),
-}).refine((v) => v.count2h <= v.count6h && v.count6h <= v.count24h, "Snapshot windows must be consistent");
+  count3h: count, previousCount3h: count, scoringSourceCount: count.max(3), algorithmVersion: z.enum(["v1", "v2"]), batchId: id.nullable(),
+  growthRatio: z.number().positive().optional(), latestSignalAgeHours: z.number().nonnegative().nullable().optional(), firstSeenAt: timestamp.nullable().optional(),
+  clusterConsistency: factor.optional(), evidenceConfidence: factor.optional(), diversityConfidence: factor.optional(), sourceBalance: factor.optional(),
+  scoreCap: z.number().int().min(0).max(100).optional(), changePercent: z.number().int().min(-100).max(300).optional(), changeCapped: z.boolean().optional(),
+}).refine((v) => v.count2h <= v.count6h && v.count6h <= v.count24h, "Snapshot windows must be consistent")
+  .refine((v) => v.algorithmVersion !== "v2" || [v.growthRatio,v.latestSignalAgeHours,v.firstSeenAt,v.clusterConsistency,v.evidenceConfidence,v.diversityConfidence,v.sourceBalance,v.scoreCap,v.changePercent,v.changeCapped].every((field) => field !== undefined), "V2 snapshots require scoring telemetry")
+  .refine((v) => v.algorithmVersion !== "v2" || v.pulseScore <= (v.scoreCap ?? 0), "Score exceeds evidence cap")
+  .refine((v) => v.algorithmVersion !== "v2" || !v.firstSeenAt || v.firstSeenAt <= v.capturedAt, "First seen cannot follow capture time");
 export type SnapshotRecord = z.infer<typeof snapshotRecordSchema>;
 export const ingestionRunSchema = z.object({
   id, source: sourceSchema, startedAt: timestamp, finishedAt: timestamp.nullable(), discovered: count,

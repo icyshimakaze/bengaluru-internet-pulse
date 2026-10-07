@@ -26,7 +26,11 @@ test("filters, empty states and public API work", async ({ page, request }) => {
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page.locator(".trend-row")).toHaveCount(6);
   const response = await request.get("/api/pulse"); expect(response.status()).toBe(200);
-  expect((await response.json()).mode).toBe("demo");
+  const data = await response.json();
+  expect(data.mode).toBe("demo"); expect(data.version).toBe("v2");
+  expect(data.trends[0].current2h).toBeGreaterThanOrEqual(2);
+  expect(data.trends[0].growthRatio).toBe((data.trends[0].current2h + 1) / (data.trends[0].previous2h + 1));
+  expect(["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"]).toContain(data.trends[0].lifecycle);
   expect((await request.get("/api/ingest")).status()).toBe(401);
   expect((await request.get("/api/topics/missing")).status()).toBe(404);
 });

@@ -1,17 +1,19 @@
-import type { Observation, Trend } from "@/lib/domain/schema";
+import type { Observation, Trend, Topic } from "@/lib/domain/schema";
 import type { SnapshotRecord } from "@/lib/db/records";
-import { HOUR } from "./engine";
+import { evaluateTopics, deduplicateEvidence, HOUR, ALGORITHM_VERSION } from "./engine";
 
-export function topicSnapshot(topicId: string, evidence: readonly Observation[], now: Date, trend?: Trend, batchId: string | null = null): SnapshotRecord {
+export function topicSnapshot(topicId: string, evidence: readonly Observation[], now: Date, trend?: Trend, batchId: string | null = null, topic?: Topic): SnapshotRecord {
   const end = now.getTime();
-  const recent = evidence.filter((o) => { const t = Date.parse(o.publishedAt); return t <= end && t >= end - 24 * HOUR; });
-  const window = (hours: number) => recent.filter((o) => Date.parse(o.publishedAt) > end - hours * HOUR);
-  const current2 = window(2), current3 = window(3);
-  const previous2 = recent.filter((o) => { const t = Date.parse(o.publishedAt); return t > end - 4 * HOUR && t <= end - 2 * HOUR; });
-  const baseline3 = recent.filter((o) => { const t = Date.parse(o.publishedAt); return t > end - 6 * HOUR && t <= end - 3 * HOUR; });
-  return { topicId, capturedAt: now.toISOString(), count2h: current2.length, previousCount2h: previous2.length, count6h: window(6).length,
-    count24h: recent.length, sourceCount: new Set(current2.map((o) => o.source)).size, count3h: current3.length, previousCount3h: baseline3.length,
-    scoringSourceCount: new Set(current3.map((o) => o.source)).size, velocityScore: trend?.velocity ?? 0, volumeScore: trend?.volume ?? 0,
-    diversityScore: trend?.diversity ?? 0, recencyScore: trend?.recency ?? 0, confidence: trend?.confidence ?? 0,
-    pulseScore: trend?.score ?? 0, lifecycle: trend?.lifecycle ?? "inactive", algorithmVersion: "v1", batchId };
+  const metric = trend ?? evaluateTopics([topic ?? { slug: evidence[0]?.topicSlug ?? "unknown", title: "Unknown topic", category: "City life", description: "Public discussion", method: "rules" }], evidence, now)[0]!;
+  const recent = deduplicateEvidence(evidence, now).filter((o) => Date.parse(o.publishedAt) >= end - 24 * HOUR);
+  const current3 = recent.filter((o) => Date.parse(o.publishedAt) > end - 3 * HOUR);
+  const previous3 = recent.filter((o) => Date.parse(o.publishedAt) > end - 6 * HOUR && Date.parse(o.publishedAt) <= end - 3 * HOUR);
+  return { topicId, capturedAt: now.toISOString(), count2h: metric.current2h, previousCount2h: metric.previous2h, count6h: metric.count6h,
+    count24h: metric.count24h, sourceCount: metric.sourceCount, count3h: current3.length, previousCount3h: previous3.length,
+    scoringSourceCount: metric.sourceCount, velocityScore: metric.velocity, volumeScore: metric.volume, diversityScore: metric.diversity,
+    recencyScore: metric.recency, confidence: metric.confidence, pulseScore: metric.score, lifecycle: metric.lifecycle,
+    algorithmVersion: ALGORITHM_VERSION, batchId, growthRatio: metric.growthRatio, latestSignalAgeHours: metric.latestSignalAgeHours,
+    firstSeenAt: metric.firstSeenAt, clusterConsistency: metric.clusterConsistency, evidenceConfidence: metric.evidenceConfidence,
+    diversityConfidence: metric.diversityConfidence, sourceBalance: metric.sourceBalance, scoreCap: metric.scoreCap,
+    changePercent: metric.growthPercent, changeCapped: metric.changeCapped };
 }
