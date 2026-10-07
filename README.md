@@ -70,16 +70,16 @@ The repository saves new signals before enrichment, supplies topic IDs seen with
 
 | Route | Behavior |
 | --- | --- |
-| `GET /api/pulse` | Complete ranked snapshot, evidence, hotspots and source health |
-| `GET /api/topics` | Filter using `q`, `category`, `source`, `lifecycle`, `limit` (1–100) |
-| `GET /api/topics/[slug]` | Active topic detail; 404 for absent/inactive topics |
-| `GET /api/hotspots` | Explicit neighborhood mentions, with location caveat |
-| `GET /api/health` | Operational state, source status, freshness and mode |
+| `GET /api/pulse` | `window=2h\|6h\|24h`, `category`, `source`; top/rising topics, source stream, snapshot and ingestion metadata |
+| `GET /api/topics` | Filter the full set using `window`, `q`, `category`, `source`, `lifecycle`, `limit` (1–100) |
+| `GET /api/topics/[slug]` | Retained topic detail, including inactive topics; versioned history, bounded evidence and related signals |
+| `GET /api/hotspots` | Window/category/source filters; neighborhood activity, average/top pulse and top topic |
+| `GET /api/health` | Application/database status, last ingestion, source statuses and 24-hour collection count |
 | `GET /api/ingest` | Protected ingestion; 401 without bearer auth; 409 if busy or in demo mode |
 
 Responses have `Cache-Control: no-store`. Unavailable live reads return 503 and expose `generatedAt: null` when there is no readable collection. Stale health returns 503; stale data reads expose available evidence with explicit freshness metadata. Counts are sampled distinct observations, not readership, unique people or citywide activity.
 
-The current pulse contract is `version: "v2"`. Lifecycle filters accept `NEW`, `EMERGING`, `RISING`, `HOT`, `STABLE` and `COOLING`. Topic metrics include `current2h`, `previous2h`, `count6h`, `count24h`, `sourceCount`, `growthRatio`, `latestSignalAgeHours`, `firstSeenAt`, separate `confidence` and bounded `growthPercent`/`changeCapped`. Original count aliases now describe the two-hour comparison. Historical database rows retain their original scoring version and score.
+The current scoring contract is `version: "v2"`; dashboard responses use `topTopics` and `risingTopics` instead of exposing internal raw trends. Lifecycle filters accept `NEW`, `EMERGING`, `RISING`, `HOT`, `STABLE` and `COOLING`. Topic metrics include `current2h`, `previous2h`, `count6h`, `count24h`, `sourceCount`, `growthRatio`, `latestSignalAgeHours`, `firstSeenAt`, separate `confidence` and bounded `growthPercent`/`changeCapped`. Selection windows leave scoring fixed at two hours. Historical database rows retain their original scoring version and score. A 15-second server cache reduces query work; health probes storage directly. Parameters and persisted models are validated, and public DTOs omit secrets and storage internals. See [Read API](docs/read-api.md) for complete contracts, privacy, limits and freshness behavior.
 
 ## Architecture and stack
 

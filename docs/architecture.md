@@ -26,12 +26,12 @@ Source-specific modules produce the shared `NormalizedSignal` contract (news/soc
 
 ## Boundaries
 
-- `src/lib/domain`: Zod schemas and serializable contracts.
+- `src/lib/domain`: Zod schemas, internal scoring contracts and small public read DTOs.
 - `src/lib/sources`: public API adapters and bounded HTTP transport.
 - `src/lib/pipeline`: normalization, URL/content identity, relevance, canonicalization, ingestion.
 - `src/lib/trends`: pure scoring with an injected clock; no AI or network dependency.
-- `src/lib/db`: libSQL schema, parameterized repositories, transactional snapshots and ingestion lease.
-- `src/lib/server`: validated configuration, logging, server-only read service.
+- `src/lib/db`: libSQL schema, parameterized repositories, transactional snapshots, ingestion lease and a dedicated read-only repository.
+- `src/lib/server`: validated configuration, logging, cached server query functions and public model projections.
 - `src/fixtures`: reproducible, explicitly fictional demo observations.
 - `src/app`: App Router pages and read APIs. Leaflet and charts load in client components.
 
@@ -44,6 +44,8 @@ Evidence is retained for 14 days; topic history and dashboard snapshots for 30 d
 Publication also snapshots retained topics with one or zero current signals, so declines remain visible in history. Migration 5 preserves v1 historical scores and allows both scoring versions at the same capture time. Reads can reevaluate an old v1 dashboard cache using v2 without rewriting history or collection timestamps. The read service marks old live snapshots stale and recomputes display rankings so expired topics cannot appear current. Operational health is separate from trend confidence.
 
 Versioned SQL migrations, a checksum ledger and legacy backfill are in `src/lib/db`. Typed repositories handle items, topics, snapshot history, hotspots, ingestion status and pruning. Publication verifies the lease, deduplicates writes and recomputes the deterministic score from persisted evidence inside one short transaction, committing topic metrics, history, dashboard and source counters together. No upstream or AI calls occur inside that transaction. See [Persistence](persistence.md).
+
+Public reads use one consistent libSQL read batch, a 15-second server cache and strict DTO projections. Window/category/source filters select evidence and topics; they keep the fixed two-hour scoring equation. Topic detail includes retained inactive topics, bounded versioned history, evidence and related signals. Hotspots expose activity and mean/top pulse. Health bypasses caching and reads database connectivity, latest source runs and 24-hour collection counts. HTTP responses never include credentials, fingerprints, source IDs or raw database/model errors. Missing/stale storage and delayed cache refresh remain visible. See [Read API](read-api.md).
 
 ## AI contract
 

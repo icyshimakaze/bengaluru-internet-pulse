@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 test("dashboard identifies Bengaluru, demo mode, multiple sources and momentum", async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+  const backendRequests: string[] = [];
+  page.on("request", (r) => { if (/(api\.openai\.com|\.turso\.io|api\.gdeltproject\.org|public\.api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Bengaluru, in motion." })).toBeVisible();
   await expect(page.getByText("Demo snapshot.", { exact: true })).toBeVisible();
@@ -16,6 +18,7 @@ test("dashboard identifies Bengaluru, demo mode, multiple sources and momentum",
   await expect(page.getByText("Demo topic · fictional evidence, real deterministic scoring.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Example evidence" })).toBeVisible();
   expect(errors).toEqual([]);
+  expect(backendRequests).toEqual([]);
 });
 test("filters, empty states and public API work", async ({ page, request }) => {
   await page.goto("/");
@@ -28,9 +31,9 @@ test("filters, empty states and public API work", async ({ page, request }) => {
   const response = await request.get("/api/pulse"); expect(response.status()).toBe(200);
   const data = await response.json();
   expect(data.mode).toBe("demo"); expect(data.version).toBe("v2");
-  expect(data.trends[0].current2h).toBeGreaterThanOrEqual(2);
-  expect(data.trends[0].growthRatio).toBe((data.trends[0].current2h + 1) / (data.trends[0].previous2h + 1));
-  expect(["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"]).toContain(data.trends[0].lifecycle);
+  expect(data.topTopics[0].current2h).toBeGreaterThanOrEqual(2);
+  expect(data.topTopics[0].growthRatio).toBe((data.topTopics[0].current2h + 1) / (data.topTopics[0].previous2h + 1));
+  expect(["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"]).toContain(data.topTopics[0].lifecycle);
   expect((await request.get("/api/ingest")).status()).toBe(401);
   expect((await request.get("/api/topics/missing")).status()).toBe(404);
 });
@@ -56,5 +59,25 @@ test("unconfigured live mode shows honest empty data and fails operational healt
   const data = await response.json();
   expect(data.mode).toBe("live"); expect(data.generatedAt).toBeNull();
   await expect(page.getByText("Pending", { exact: true })).toBeVisible();
-  expect((await request.get("http://127.0.0.1:3001/api/health")).status()).toBe(503);
+  const health = await request.get("http://127.0.0.1:3001/api/health"); expect(health.status()).toBe(503);
+  expect(await health.json()).toMatchObject({ application: { status: "ok" }, database: { status: "unconfigured" }, recentSignalCount: null });
+});
+test("public query routes expose filtered, bounded models and proper errors", async ({ request }) => {
+  for (const [window, signalCount] of [["2h", 79], ["6h", 119], ["24h", 221]] as const) {
+    const response = await request.get("/api/pulse?window=" + window); expect(response.status()).toBe(200);
+    const data = await response.json(); expect(data.signalCount).toBe(signalCount); expect(data.snapshot.scoringWindow).toBe("2h");
+    expect(data.sourceStream).toHaveLength(30); expect(data.sourceStream[0]).not.toHaveProperty("sourceId");
+    expect(data.topTopics[0]).not.toHaveProperty("evidence");
+  }
+  const filtered = await (await request.get("/api/pulse?window=6h&category=Weather&source=gdelt")).json();
+  expect(filtered.topTopics).toHaveLength(1); expect(filtered.topTopics[0].sourceCount).toBe(3);
+  expect(filtered.sourceStream.every((s: { source: string }) => s.source === "gdelt")).toBe(true);
+  const detail = await (await request.get("/api/topics/namma-metro")).json();
+  expect(detail.history[0].algorithmVersion).toBe("v2"); expect(detail.sourceEvidence).toHaveLength(30);
+  expect(detail.relatedSignals.length).toBeGreaterThan(0); expect(detail.topic).not.toHaveProperty("method");
+  const spots = await (await request.get("/api/hotspots?category=Weather")).json();
+  expect(spots.hotspots[0]).toMatchObject({ neighborhood: "Hebbal", topTopic: { slug: "rain-and-waterlogging" }, averagePulse: expect.any(Number) });
+  expect((await request.get("/api/pulse?window=3h")).status()).toBe(400);
+  expect((await request.get("/api/pulse?source=gdelt&source=bluesky")).status()).toBe(400);
+  expect((await request.post("/api/pulse")).status()).toBe(405);
 });
