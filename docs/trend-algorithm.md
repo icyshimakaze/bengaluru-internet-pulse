@@ -2,6 +2,8 @@
 
 AI never computes or influences the final formula. Topic membership determines the evidence set; every numeric metric is calculated from that set by a pure function with an explicit `now`.
 
+Semantic enrichment's model/mock `confidence` measures classification certainty only and is stored separately. It is not a scoring component, weight, or replacement for deterministic corroboration confidence. Pending, failed and irrelevant items contribute no observations. Mock enrichment is identified in live read metadata; source evidence and score calculations are never fabricated.
+
 ## Windows
 
 Use distinct observations in `[now − 24h, now]`. Current count `c` is `(now − 3h, now]`; baseline `b` is `(now − 6h, now − 3h]`. Future observations are excluded. Exact boundary handling is covered by tests. A topic needs two current observations to rank; single observations remain persisted but do not become trends.

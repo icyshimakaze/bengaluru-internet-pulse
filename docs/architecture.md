@@ -12,15 +12,17 @@ The dashboard answers what is accelerating across Bengaluru, using independently
 GDELT / Bluesky public AppView / Hacker News Algolia
   → deadline + bounded retry → Zod payload validation
   → normalized observations with source, URL, text and publication time
-  → URL/content dedupe → Bengaluru relevance
-  → topic canonicalization (local semantic rules; optional structured AI)
-  → libSQL items + canonical topics + per-source ingestion runs
+  → URL/content dedupe → durable pending libSQL items
+  → batched semantic enrichment (mock by default; optional Responses API)
+  → canonical topics + validated assignments + per-source ingestion runs
   → deterministic rolling-window engine
   → atomic, versioned snapshots + source health
   → server read service → Next.js APIs → responsive UI
 ```
 
 The orchestrator polls all sources independently. Invalid items are rejected individually. Upstream outages reduce coverage rather than replacing evidence. Ingestion is an explicit CLI or authenticated scheduled endpoint, never a read-side effect.
+
+Source-specific modules produce the shared `NormalizedSignal` contract (news/social/tech) through a bounded collector and HTTP transport. GDELT performs five broad/targeted searches; Bluesky four public city searches; HN two story searches. Queries use explicit recent windows, per-provider concurrency/pacing and a 35-second total source budget. Successful queries survive failed siblings with partial coverage visible in source health and durable run counters. Public evidence retains post/story permalinks and discards unnecessary profile/engagement data. The offline CLI fixture mode runs this same pipeline against marked data in an isolated local database.
 
 ## Boundaries
 
@@ -35,7 +37,7 @@ The orchestrator polls all sources independently. Invalid items are rejected ind
 
 ## Storage and concurrency
 
-Local development can use a file-backed libSQL database. Vercel uses Turso's remote libSQL endpoint; its ephemeral filesystem is not persistent storage. Observation identity is unique and repeated polls are idempotent. A database lease excludes overlapping runs. One short transaction inserts canonical topics and items and publishes the complete snapshot and its source run counters. Read traffic sees a complete previous or new snapshot.
+Local development can use a file-backed libSQL database. Vercel uses Turso's remote libSQL endpoint; its ephemeral filesystem is not persistent storage. Observation identity is unique and repeated polls are idempotent. A database lease excludes overlapping runs. Collection first saves pending items, so model or publication failure cannot lose evidence. A subsequent short transaction assigns canonical topics and publishes enrichment, the complete snapshot and its source run counters. Read traffic sees a complete previous or new snapshot.
 
 Evidence is retained for 14 days; topic history and dashboard snapshots for 30 days. A dashboard snapshot contains the most recent 24 hours, with a three-hour current window and preceding three-hour baseline. Relational topic snapshots also expose exact current/previous 2h, 6h and 24h counts. Persisted snapshots retain their scoring time; the read service marks old live snapshots stale and recomputes display rankings from retained evidence so expired topics cannot appear current. Operational health is separate from trend confidence.
 
@@ -43,7 +45,7 @@ Versioned SQL migrations, a checksum ledger and legacy backfill are in `src/lib/
 
 ## AI contract
 
-Optional server-side structured output may supply a canonical topic, category, neighborhood, Bengaluru relevance, and concise description. Existing topic IDs must be validated against the supplied catalog. All model output is untrusted and validated. The model receives source text as data, has no tools, and cannot write scores or change ranking. Failure falls back to local topic rules. AI is optional so ingestion remains useful without paid credentials.
+Server-side structured output supplies canonical topic identity, category, neighborhood, Bengaluru relevance, a short factual summary and classification confidence. The default mock provider costs nothing; the explicit OpenAI provider uses Responses with `gpt-6-luna`. Both use the same validation boundary. Source content is untrusted data and never modifies instructions. Failures leave durable pending items rather than fabricated classifications. AI cannot write scores, trend confidence, ranking or lifecycle. See [Semantic enrichment](enrichment.md) for schemas, batching, provenance, deadlines and retry limits.
 
 ## Delivery and operations
 

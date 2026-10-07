@@ -7,10 +7,14 @@ const schema = z.object({
   TURSO_DATABASE_URL: optional.refine((v) => !v || /^(libsql:\/\/|https:\/\/|file:)/.test(v), "Use a libSQL, HTTPS or local file URL"),
   TURSO_AUTH_TOKEN: optional, CRON_SECRET: optional.refine((v) => !v || v.length >= 32, "CRON_SECRET must be at least 32 characters"),
   AI_ENABLED: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
-  OPENAI_API_KEY: optional, OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_API_KEY: optional, OPENAI_MODEL: z.literal("gpt-6-luna").default("gpt-6-luna"),
+  ENRICHMENT_MODE: z.enum(["mock", "openai", "off"]).default("mock"),
+  ENRICHMENT_BATCH_SIZE: z.coerce.number().int().min(1).max(10).default(10),
+  ENRICHMENT_MAX_ITEMS: z.coerce.number().int().min(1).max(30).default(30),
   SOURCE_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15000).default(8000),
 }).superRefine((v, ctx) => {
-  if (v.AI_ENABLED && !v.OPENAI_API_KEY) ctx.addIssue({ code: "custom", path: ["OPENAI_API_KEY"], message: "AI_ENABLED requires an API key" });
+  // Missing OpenAI credentials are an enrichment outage, not an ingestion failure.
+  // AI_ENABLED is retained for old environments but cannot opt into paid requests.
   if (v.TURSO_DATABASE_URL && !v.TURSO_DATABASE_URL.startsWith("file:") && !v.TURSO_AUTH_TOKEN) ctx.addIssue({ code: "custom", path: ["TURSO_AUTH_TOKEN"], message: "Remote databases require a token" });
   if (process.env.VERCEL && v.TURSO_DATABASE_URL?.startsWith("file:")) ctx.addIssue({ code: "custom", path: ["TURSO_DATABASE_URL"], message: "Vercel requires a persistent remote database" });
 });

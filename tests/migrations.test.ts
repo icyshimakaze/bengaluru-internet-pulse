@@ -16,8 +16,8 @@ const legacySql = `
 describe("versioned SQL migrations", () => {
   it("creates relational tables, required fields, indexes, foreign keys and an immutable ledger", async () => {
     const repo = testRepository();
-    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3], version: 3 });
-    expect(await repo.initialize()).toEqual({ applied: [], version: 3 });
+    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4], version: 4 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 4 });
     const expected = {
       items: ["id", "source", "source_id", "canonical_url", "title", "excerpt", "domain", "published_at", "collected_at", "content_fingerprint", "topic_id", "category", "neighborhood", "local_relevance", "enrichment_status"],
       topics: ["id", "slug", "canonical_label", "category", "neighborhood", "first_seen_at", "last_seen_at", "lifecycle", "pulse_score", "confidence", "summary"],
@@ -30,17 +30,17 @@ describe("versioned SQL migrations", () => {
     }
     expect((await repo.client.execute("SELECT * FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")).rows.length).toBeGreaterThanOrEqual(17);
     expect((await repo.client.execute("PRAGMA foreign_key_list(items)")).rows).toHaveLength(2);
-    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(3);
+    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(4);
     const edited = loadMigrations().map((m, i) => i ? m : { ...m, sql: m.sql + "\n-- edited" });
     await expect(migrate(repo.client, edited)).rejects.toThrow("has changed");
   });
   it("rolls back failed DDL without recording it and can retry a corrected migration", async () => {
     const repo = testRepository(); await repo.initialize();
-    const migration = { version: 4, name: "0004_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
+    const migration = { version: 5, name: "0005_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
     await expect(migrate(repo.client, [...loadMigrations(), migration])).rejects.toThrow();
     expect((await repo.client.execute("SELECT name FROM sqlite_master WHERE name='rollback_probe'")).rows).toHaveLength(0);
-    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(3);
-    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [4], version: 4 });
+    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(4);
+    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [5], version: 5 });
     await expect(repo.initialize()).rejects.toThrow("Unsupported migration history");
   });
   it("rejects out-of-order versions and missing ledger entries", async () => {
@@ -75,7 +75,7 @@ describe("versioned SQL migrations", () => {
     expect(tables).not.toContain("observations");
     expect(tables).not.toContain("legacy_topics");
     expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
-    expect(await repo.initialize()).toEqual({ applied: [], version: 3 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 4 });
   });
   it("leaves the original legacy schema and rows intact if backfill validation fails", async () => {
     const repo = testRepository();

@@ -1,6 +1,6 @@
 import "server-only";
 import type { Row, InStatement } from "@libsql/client";
-import { type Topic, type Signal, type Observation } from "@/lib/domain/schema";
+import { sourceTypeFor, type Topic, type Signal, type Observation } from "@/lib/domain/schema";
 import { itemRecordSchema, topicRecordSchema, snapshotRecordSchema, ingestionRunSchema, type ItemRecord, type TopicRecord, type SnapshotRecord, type IngestionRun } from "./records";
 
 export function itemFromRow(r: Row): ItemRecord {
@@ -27,6 +27,7 @@ export function runFromRow(r: Row): IngestionRun {
 export function toDomainTopic(t: TopicRecord): Topic { return { slug: t.slug, title: t.canonicalLabel, category: t.category, description: t.summary, method: t.enrichmentMethod }; }
 export function toSignal(i: ItemRecord): Signal {
   return { id: i.id, source: i.source, sourceId: i.sourceId, canonicalUrl: i.canonicalUrl, url: i.originalUrl, title: i.title, text: i.excerpt,
+    excerpt: i.excerpt, domain: i.domain, sourceType: sourceTypeFor[i.source],
     publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind };
 }
 export function toObservations(items: ItemRecord[], topics: TopicRecord[]): Observation[] {

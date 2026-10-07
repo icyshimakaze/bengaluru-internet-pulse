@@ -7,15 +7,19 @@ import { topicSnapshot } from "@/lib/trends/snapshots";
 import { DataRepository, DAY, ITEM_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
 import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, type ItemRecord, type TopicRecord } from "./records";
 import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
+import { EnrichmentRepository, applyEnrichments } from "./enrichment-repository";
+import type { EnrichmentAssignment } from "@/lib/domain/enrichment";
 
 export type PublishOptions = {
   items?: ItemRecord[];
   topicRecords?: TopicRecord[];
   runs?: Array<{ id: string; health: SourceStatus }>;
+  enrichments?: EnrichmentAssignment[];
 };
 
 // Domain read models and the pipeline share this facade. Components never import it.
 export class Repository extends DataRepository {
+  get enrichment() { return new EnrichmentRepository(this.client); }
   async acquireLease(now: Date): Promise<string | null> {
     z.date().parse(now);
     const owner = randomUUID();
@@ -75,6 +79,7 @@ export class Repository extends DataRepository {
         return itemInsert(topic ? { ...item, topicId: topic.id, category: topic.category } : item);
       });
       const inserted = inserts.length ? (await tx.batch(inserts)).reduce((n, r) => n + r.rows.length, 0) : 0;
+      await applyEnrichments(tx, options.enrichments ?? [], [...bySlug.values()], isFixture, captured);
       const rows = await tx.batch([
         { sql: "SELECT * FROM topics WHERE is_fixture=? ORDER BY slug", args: [Number(isFixture)] },
         { sql: "SELECT * FROM items WHERE is_fixture=? AND published_at>=? AND published_at<=? ORDER BY published_at,id",
@@ -86,6 +91,17 @@ export class Repository extends DataRepository {
       const trends = computeTrends(storedTopics.map(toDomainTopic), evidence, captured);
       const pulse = pulseSchema.parse({ ...template, generatedAt: capturedAt, trends, hotspots: computeHotspots(trends, captured),
         totalSignals: evidence.filter((o) => Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR).length });
+      if (pulse.enrichment) {
+        const recent = storedItems.filter((i) => Date.parse(i.publishedAt) >= captured.getTime() - DAY);
+        pulse.enrichment = { ...pulse.enrichment, pending: recent.filter((i) => i.enrichmentStatus === "pending" || i.enrichmentStatus === "failed").length,
+          completed: recent.filter((i) => i.enrichmentStatus === "completed").length, irrelevant: recent.filter((i) => i.enrichmentStatus === "irrelevant").length };
+        if (pulse.enrichment.pending) {
+          if (pulse.status === "healthy") pulse.status = "degraded";
+          const message = `${pulse.enrichment.pending} collected signals await enrichment and are excluded from trend scores.`;
+          pulse.notice = [pulse.notice, message].filter(Boolean).join(" ");
+        }
+        if (pulse.enrichment.provider === "off") pulse.notice = [pulse.notice, "Topic enrichment is disabled; collection continues safely."].filter(Boolean).join(" ");
+      }
       const parent = await tx.execute({ sql: "INSERT INTO pulse_snapshots(id,captured_at,mode,payload) VALUES (?,?,?,?) ON CONFLICT(mode,captured_at) DO UPDATE SET payload=excluded.payload RETURNING id",
         args: [randomUUID(), capturedAt, pulse.mode, JSON.stringify(pulse)] });
       const batchId = String(parent.rows[0]!.id);
@@ -112,8 +128,8 @@ export class Repository extends DataRepository {
         const count = await tx.execute({ sql: "SELECT count(*) AS inserted FROM items WHERE ingestion_run_id=?", args: [current.id] });
         const run = ingestionRunSchema.parse({ ...current, finishedAt: now.toISOString(), discovered: health.fetched,
           inserted: Number(count.rows[0]!.inserted), duplicates: Math.max(0, health.accepted - Number(count.rows[0]!.inserted)),
-          errors: health.rejected + (health.status === "error" ? 1 : 0),
-          status: health.status === "error" ? "failed" : health.rejected ? "partial" : "completed",
+          errors: health.rejected + (health.failedQueries ?? (health.status === "error" ? 1 : 0)),
+          status: health.status === "error" ? "failed" : health.status === "partial" || health.rejected ? "partial" : "completed",
           errorMessage: health.error ?? (health.rejected ? "VALIDATION_REJECTED" : null) });
         statements.push({ sql: "UPDATE ingestion_runs SET finished_at=?,discovered=?,inserted=?,duplicates=?,errors=?,status=?,error_message=? WHERE id=?",
           args: [run.finishedAt, run.discovered, run.inserted, run.duplicates, run.errors, run.status, run.errorMessage, run.id] });

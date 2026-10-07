@@ -29,4 +29,25 @@ describe("bounded upstream transport", () => {
     await expect(fetchJson("https://example.org", { fetcher, timeoutMs: 25, attempts: 1 })).rejects.toMatchObject({ name: "TimeoutError" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("honors rate-limit retry delays and avoids retrying long Retry-After responses early", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response("rate limited", { status: 429, headers: { "Retry-After": "0" } })).mockResolvedValueOnce(Response.json({ ok: true }));
+    expect(await fetchJson("https://example.org", { fetcher })).toEqual({ ok: true });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const blocked = vi.fn<typeof fetch>().mockResolvedValue(new Response("rate limited", { status: 429, headers: { "Retry-After": "60" } }));
+    await expect(fetchJson("https://example.org", { fetcher: blocked })).rejects.toThrow("HTTP_429");
+    expect(blocked).toHaveBeenCalledTimes(1);
+  });
+  it("bounds a slow response body and streamed responses without content-length", async () => {
+    const slow = new ReadableStream<Uint8Array>({ start() {} });
+    await expect(fetchJson("https://example.org", { timeoutMs: 25, attempts: 1, fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(slow)) })).rejects.toMatchObject({ name: "TimeoutError" });
+    const large = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1)); controller.close(); } });
+    await expect(fetchJson("https://example.org", { fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(large)) })).rejects.toThrow("RESPONSE_TOO_LARGE");
+  });
+  it("bounds fetchers that ignore abort and does not retry an aborted source deadline", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(() => {}));
+    await expect(fetchJson("https://example.org", { fetcher, timeoutMs: 25, attempts: 1 })).rejects.toMatchObject({ name: "TimeoutError" });
+    const signal = AbortSignal.timeout(25);
+    await expect(fetchJson("https://example.org", { fetcher, timeoutMs: 1000, signal })).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });

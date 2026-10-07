@@ -20,7 +20,7 @@ export function ageSnapshot(pulse: Pulse, now: Date): Pulse {
   const trends = computeTrends(pulse.trends, evidence, now);
   return { ...pulse, evaluatedAt: now.toISOString(), stale, trends, hotspots: computeHotspots(trends, now),
     status: stale && pulse.status === "healthy" ? "degraded" : pulse.status,
-    notice: stale ? "The last collection is over 90 minutes old. Topics have been aged against the current time; fresh ingestion is needed." : pulse.notice };
+    notice: stale ? ["The last collection is over 90 minutes old. Topics have been aged against the current time; fresh ingestion is needed.", pulse.notice].filter(Boolean).join(" ") : pulse.notice };
 }
 export const readPulse = cache(async (): Promise<Pulse> => {
   const now = new Date();

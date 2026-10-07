@@ -27,6 +27,8 @@ npm run dev
 
 The ingestion command automatically migrates the schema too. Poll regularly to build a baseline; first-run rankings have limited history. Public sources can fail or return no matches. Live mode always reports these conditions and never substitutes demo evidence.
 
+`npm run ingest` also works without an environment file, defaulting to local `.data/pulse.db` and **free mock enrichment**. For an offline end-to-end collection check, run `npm run ingest -- --fixtures`; it uses the same three adapters and enrichment/persistence pipeline with fictional payloads in separate `.data/ingestion-fixtures.db`. It forces the local mock provider, makes no source or OpenAI network requests, and cannot seed the configured remote database.
+
 ## Checks
 
 ```sh
@@ -54,9 +56,13 @@ The included Vercel cron runs daily (02:23 UTC / 07:53 IST), compatible with [Ho
 
 `GET /api/ingest` supports Vercel cron and authenticated operators with `Authorization: Bearer <CRON_SECRET>`. Public reads never trigger source calls or writes. The cron secret must not be placed in a URL or a `NEXT_PUBLIC_` variable.
 
-## Optional AI
+## Semantic enrichment
 
-Off by default. Enable `AI_ENABLED=true` and supply a server-only `OPENAI_API_KEY` and `OPENAI_MODEL` to use structured topic matching through the [Responses API](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). Only the first 30 new relevant observations per poll are sent in a bounded request, limited to 1,000 text characters each. No keys or post bodies are logged; response storage is disabled. AI failure falls back to synonym rules and token matching. AI cannot set scores or lifecycle. Model access and usage billing depend on the API account; AI is not required for live collection.
+The default `ENRICHMENT_MODE=mock` uses local deterministic mock responses, needs no key, and incurs no API bills. Collected evidence stays real in live mode; the snapshot explicitly identifies mock topic matching. `off` stores pending signals without classifying them. The legacy `AI_ENABLED` flag cannot enable paid calls.
+
+The production path uses server-only OpenAI Responses with **`gpt-6-luna`**, strict structured output, `store: false` and no tools. It requires an explicit `ENRICHMENT_MODE=openai` configuration. No real OpenAI call is made during development checks. Source titles/excerpts and catalog labels are untrusted JSON input and never become instructions.
+
+The repository saves new signals before enrichment, supplies topic IDs seen within 24 hours, batches at most 10 items, and processes at most 30 per run. Validated settings can lower these limits. Completed items are never processed again. A total 15-second deadline, at most two transient-error attempts per request, a 15-minute per-item cooldown and three-run attempt cap bound cost and outages. Failure keeps the signal pending for a later run. Classification confidence is stored separately; only the deterministic engine computes trend scores and confidence. See [Semantic enrichment](docs/enrichment.md) for result schemas, category mapping, security, provenance and fallback behavior.
 
 ## API
 

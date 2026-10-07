@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { signalSchema, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
+import { z } from "zod";
+import { signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
 
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export function cleanText(value: string): string {
@@ -15,25 +16,50 @@ export function canonicalUrl(value: string): string {
   url.pathname = url.pathname.replace(/\/+$/, "") || "/";
   return url.toString();
 }
+function characteristic(value: string): string {
+  return cleanText(value).normalize("NFKC").toLowerCase().replace(/https?:\/\/\S+/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+}
+function unbrand(value: string, domain: string): string {
+  const parts = cleanText(value).split(/\s+[|–—-]\s+/u);
+  if (parts.length < 2) return value;
+  const suffix = characteristic(parts.at(-1)!);
+  const hostname = domain.toLowerCase().replace(/^www\./, "");
+  const publisher = characteristic(hostname.split(".")[0] ?? "");
+  if (suffix === characteristic(hostname) || (publisher.length >= 4 && suffix.replaceAll(" ", "") === publisher.replaceAll(" ", ""))) {
+    parts.pop(); return parts.join(" — ");
+  }
+  return value;
+}
+export function contentFingerprint(input: { title: string; excerpt: string; domain: string }): string {
+  const title = characteristic(unbrand(input.title, input.domain));
+  const content = characteristic(unbrand(input.excerpt, input.domain));
+  // Domain removes publisher branding; it is deliberately not a hash salt,
+  // so the same syndicated headline/content on different domains can match.
+  return hash(JSON.stringify({ version: 2, title, content: content === title ? "" : content }));
+}
 export function normalize(input: { source: Source; sourceId: string; url: string; contentUrl?: string; title: string; text?: string; publishedAt: string; timeKind?: "published" | "discovered" }, now: Date): Signal | null {
   try {
-    const date = new Date(input.publishedAt);
+    const date = new Date(z.iso.datetime({ offset: true }).parse(input.publishedAt));
     if (!Number.isFinite(date.getTime()) || date.getTime() > now.getTime() || date.getTime() < now.getTime() - 14 * 86400000) return null;
     const title = cleanText(input.title).slice(0, 300);
-    const text = cleanText(input.text || input.title).slice(0, 4000);
-    const content = text.toLowerCase().normalize("NFKC").replace(/https?:\/\/\S+/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const text = (cleanText(input.text ?? "") || title).slice(0, 4000);
     const url = canonicalUrl(input.contentUrl ?? input.url);
+    canonicalUrl(input.url);
+    const domain = new URL(url).hostname;
     return signalSchema.parse({ ...input, id: hash(`${input.source}:${input.sourceId}`), url: input.url, canonicalUrl: url, title, text,
-      contentHash: hash(content), publishedAt: date.toISOString(), collectedAt: now.toISOString(), timeKind: input.timeKind ?? "published" });
+      excerpt: text, domain, sourceType: sourceTypeFor[input.source], contentHash: contentFingerprint({ title, excerpt: text, domain }),
+      publishedAt: date.toISOString(), collectedAt: now.toISOString(), timeKind: input.timeKind ?? "published" });
   } catch { return null; }
 }
 export function deduplicate<T extends Signal>(signals: readonly T[], existing: readonly Signal[] = []): T[] {
   const urls = new Set(existing.map((s) => s.canonicalUrl));
-  const contents = new Set(existing.map((s) => s.contentHash));
+  const contents = new Set(existing.flatMap((s) => [s.contentHash, contentFingerprint({ title: s.title, excerpt: s.text, domain: s.domain })]));
   const ids = new Set(existing.map((s) => s.id));
+  const sourceIds = new Set(existing.map((s) => `${s.source}:${s.sourceId}`));
   return [...signals].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt) || a.id.localeCompare(b.id)).filter((s) => {
-    if (urls.has(s.canonicalUrl) || contents.has(s.contentHash) || ids.has(s.id)) return false;
-    urls.add(s.canonicalUrl); contents.add(s.contentHash); ids.add(s.id); return true;
+    const identity = `${s.source}:${s.sourceId}`;
+    if (urls.has(s.canonicalUrl) || contents.has(s.contentHash) || ids.has(s.id) || sourceIds.has(identity)) return false;
+    urls.add(s.canonicalUrl); contents.add(s.contentHash); ids.add(s.id); sourceIds.add(identity); return true;
   });
 }
 export function isBengaluruRelevant(text: string): boolean { return /\b(bengaluru|bangalore|bengalooru|namma\s+metro|bmrcl|bbmp)\b|ಬೆಂಗಳೂರು/i.test(text); }

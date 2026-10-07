@@ -129,6 +129,8 @@ h1, h2, h3, p { margin: 0; }
 .health-demo .signal-dot { background: #727569; }
 .health-error, .health-unavailable { color: #9b422c; }
 .health-error .signal-dot, .health-unavailable .signal-dot { background: #9b422c; }
+.health-partial { color: #926719; }
+.health-partial .signal-dot { background: #926719; }
 .source-health > p { font-size: 10px; color: var(--muted-foreground); line-height: 1.8; margin-top: 17px; }
 .site-footer { border-top: 1px solid var(--border); margin-top: 58px; padding: 24px 0 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--muted-foreground); font-size: 10px; }
 .site-footer > p { font-family: Georgia, serif; font-style: italic; font-size: 13px; }

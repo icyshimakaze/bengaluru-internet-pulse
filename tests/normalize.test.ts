@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canonicalUrl, normalize, deduplicate, isBengaluruRelevant, locate } from "@/lib/pipeline/normalize";
+import { canonicalUrl, normalize, deduplicate, contentFingerprint, isBengaluruRelevant, locate } from "@/lib/pipeline/normalize";
+import { signalSchema } from "@/lib/domain/schema";
 import { classifyLocal } from "@/lib/pipeline/topics";
 import { now, observation } from "./helpers";
 describe("normalization and canonicalization", () => {
@@ -18,6 +19,29 @@ describe("normalization and canonicalization", () => {
     const a = observation("a", 1), b = observation("b", 1, "gdelt"), c = observation("c", 1);
     expect(deduplicate([a, { ...b, canonicalUrl: a.canonicalUrl }, { ...c, contentHash: a.contentHash }])).toHaveLength(1);
     expect(deduplicate([a], [a])).toEqual([]);
+  });
+  it("uses normalized title, publisher domain and content to detect syndicated copies", () => {
+    const a = { title: "Bengaluru METRO expands — publisherone", excerpt: "Bengaluru METRO expands — publisherone", domain: "publisherone.com" };
+    const b = { title: "Bengaluru metro expands | publishertwo", excerpt: "Bengaluru metro expands | publishertwo", domain: "publishertwo.org" };
+    expect(contentFingerprint(a)).toBe(contentFingerprint(b));
+    expect(contentFingerprint(a)).toMatch(/^[a-f0-9]{64}$/);
+    expect(contentFingerprint({ ...a, excerpt: "Bengaluru metro details changed today" })).not.toBe(contentFingerprint(a));
+    expect(contentFingerprint({ ...a, title: "Bengaluru airport expands" })).not.toBe(contentFingerprint(a));
+    expect(contentFingerprint({ title: "Bengaluru café", excerpt: "Bengaluru cafe\u0301", domain: "a.org" }))
+      .toBe(contentFingerprint({ title: "Bengaluru café", excerpt: "Bengaluru café", domain: "b.org" }));
+  });
+  it("detects source identities and content retained under the old fingerprint format", () => {
+    const a = observation("legacy", 1), b = observation("new-copy", 1, "gdelt");
+    expect(deduplicate([{ ...b, id: "another-id", source: a.source, sourceId: a.sourceId }], [a])).toEqual([]);
+    const copy = normalize({ source: "gdelt", sourceId: "syndicated-copy", url: "https://different.org/story", title: a.title, text: a.text, publishedAt: a.publishedAt }, now)!;
+    expect(deduplicate([copy], [{ ...a, contentHash: "legacy-hash" }])).toEqual([]);
+  });
+  it("reads old snapshots with derived normalized fields and rejects impossible dates", () => {
+    const current = observation("old-shape", 1);
+    const { excerpt: _excerpt, domain: _domain, sourceType: _type, ...legacy } = current;
+    void _excerpt; void _domain; void _type;
+    expect(signalSchema.parse(legacy)).toMatchObject({ excerpt: legacy.text, domain: "example.org", sourceType: "social" });
+    expect(normalize({ source: "gdelt", sourceId: "calendar", url: "https://example.org", title: "Bengaluru metro", publishedAt: "2026-09-31T00:00:00.000Z" }, now)).toBeNull();
   });
   it("rejects non-city signals and identifies explicit neighborhoods", () => {
     expect(isBengaluruRelevant("London startups and traffic")).toBe(false);

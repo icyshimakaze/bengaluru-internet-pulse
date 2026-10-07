@@ -1,0 +1,18 @@
+{
+  "gdelt": { "articles": [
+    { "url": "https://example.org/metro", "title": "Bengaluru &amp; Whitefield metro update", "seendate": "20261006T100000Z" },
+    { "url": "javascript:alert(1)", "title": "Unsafe", "seendate": "bad" }
+  ] },
+  "bluesky": { "posts": [
+    { "uri": "at://did:plc:fixture/app.bsky.feed.post/abc123",
+      "author": { "did": "did:plc:fixture", "handle": "fictional.invalid", "displayName": "Fixture profile", "description": "Must never be persisted", "avatar": "https://example.org/avatar.png" },
+      "likeCount": 99, "replyCount": 10,
+      "record": { "text": "Bengaluru rain discussion in Hebbal", "createdAt": "2026-10-06T10:00:00.000Z" } },
+    { "uri": "invalid", "record": { "text": "Bad", "createdAt": "bad" } }
+  ] },
+  "hackernews": { "hits": [
+    { "objectID": "12345", "title": "Bengaluru startup discussions", "url": null, "created_at": "2026-10-06T09:00:00.000Z",
+      "author": "fictional-user", "points": 150, "num_comments": 20 },
+    { "objectID": "broken", "title": null }
+  ] }
+}
