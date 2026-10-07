@@ -1,1 +1,1 @@
-export default function Loading() { return <div className="loading-page" role="status"><span className="eyebrow">Bengaluru Pulse</span><p>Reading the city&apos;s latest snapshot…</p></div>; }
+export default function Loading() { return <div className="home-skeleton" role="status" aria-label="Reading the city's latest snapshot"><span className="editorial-eyebrow">READING THE CITY&apos;S LATEST SNAPSHOT</span><div aria-hidden="true"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div></div>; }

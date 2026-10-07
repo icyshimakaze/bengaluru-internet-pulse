@@ -4,6 +4,7 @@ import { z } from "zod";
 import { storedPulseSchema, sourceStatusSchema, slugSchema, pulseSchema, type Pulse } from "@/lib/domain/schema";
 import { itemFromRow, topicFromRow, runFromRow, snapshotFromRow } from "./mapping";
 import { DAY } from "./data-repository";
+import { semanticCategorySchema } from "@/lib/domain/enrichment";
 
 const at = (now: Date) => z.date().parse(now).toISOString();
 const sourceRuns = (until: string, fixture: boolean): InStatement => ({
@@ -36,15 +37,20 @@ export class ReadRepository {
         AND s.captured_at>=? AND s.captured_at<=? ORDER BY s.captured_at DESC,s.algorithm_version DESC LIMIT 97`,
         args: [topicSlug, Number(fixture), historySince, until] });
     }
+    statements.push({ sql: `SELECT e.topic_id,e.semantic_category FROM topic_enrichments e
+      JOIN topics t ON t.id=e.topic_id WHERE t.is_fixture=?`, args: [Number(fixture)] });
     const rows = await this.client.batch(statements, "read");
     const snapshot = rows[0]!.rows[0];
     const parsed = snapshot ? storedPulseSchema.parse(JSON.parse(String(snapshot.payload))) : null;
     if (parsed && (parsed.mode !== mode || parsed.generatedAt !== snapshot!.captured_at)) throw new Error("SNAPSHOT_IDENTITY_MISMATCH");
-    const history = (rows[7]?.rows ?? []).map(snapshotFromRow);
-    const requestedTopic = rows[6]?.rows[0];
+    const history = (topicSlug === undefined ? [] : rows[7]!.rows).map(snapshotFromRow);
+    const requestedTopic = topicSlug === undefined ? undefined : rows[6]?.rows[0];
     const topics = rows[1]!.rows.map(topicFromRow);
     if (requestedTopic && !topics.some((t) => t.id === requestedTopic.id)) topics.push(topicFromRow(requestedTopic));
+    const semanticCategories = z.record(z.string().min(1), semanticCategorySchema).parse(
+      Object.fromEntries(rows.at(-1)!.rows.map((r) => [z.string().parse(r.topic_id), semanticCategorySchema.parse(r.semantic_category)])));
     return { mode, loadedAt: until, snapshot: parsed,
+      semanticCategories,
       topics, items: rows[2]!.rows.map(itemFromRow), sourceRuns: rows[3]!.rows.map(runFromRow),
       lastIngestion: rows[4]!.rows[0] ? runFromRow(rows[4]!.rows[0]) : null,
       lastSuccessfulIngestion: rows[5]!.rows[0] ? runFromRow(rows[5]!.rows[0]) : null,

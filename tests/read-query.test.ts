@@ -33,6 +33,18 @@ async function setup() {
   return { repo, signals, reads: new ReadRepository(repo.client) };
 }
 describe("database-backed read service", () => {
+  it("reads persisted semantic categories independently of coarse editorial buckets", async () => {
+    const { repo } = await setup();
+    const record = (await repo.findTopicBySlug(topic.slug))!;
+    await repo.client.execute({ sql: "INSERT INTO topic_enrichments(topic_id,semantic_category) VALUES (?,?)", args: [record.id, "business"] });
+    const data = await readDashboard({ category: "business" });
+    expect(data.topTopics).toHaveLength(1);
+    expect(data.topTopics[0]).toMatchObject({ semanticCategory: "business", category: "Technology", neighborhood: "Whitefield" });
+    expect(data.sourceStream).toHaveLength(2);
+    expect(data.hotspots.map((h) => h.neighborhood)).toEqual(["Whitefield"]);
+    expect((await readDashboard({ category: "technology" })).topTopics).toEqual([]);
+    expect((await readDashboard({ category: "Technology" })).topTopics).toHaveLength(1);
+  });
   it("uses a coherent read batch, isolates fixture rows and makes no source/model requests or writes", async () => {
     const { repo, reads } = await setup(); await seedFixtures(repo, now);
     const batch = vi.spyOn(repo.client, "batch");

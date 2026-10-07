@@ -1,82 +1,210 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-test("dashboard identifies Bengaluru, demo mode, multiple sources and momentum", async ({ page }) => {
-  const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
-  const backendRequests: string[] = [];
+
+test("editorial homepage explains Bengaluru, momentum, evidence and honest demo status", async ({ page }) => {
+  const errors: string[] = [], backendRequests: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => { if (/(api\.openai\.com|\.turso\.io|api\.gdeltproject\.org|public\.api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
+  await page.setViewportSize({ width: 1440, height: 1050 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Bengaluru, in motion." })).toBeVisible();
-  await expect(page.getByText("Demo snapshot.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Rising topics, measured from public signals across multiple sources.", { exact: false })).toBeVisible();
-  await expect(page.locator(".trend-row")).toHaveCount(6);
+  await expect(page.getByRole("heading", { name: "What is suddenly getting attention across Bengaluru?" })).toBeVisible();
+  await expect(page.locator(".mode-notice")).toContainText("Fictional evidence. Real scoring engine.");
+  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await expect(page.locator(".live-indicator")).toContainText("DEMO");
+  await expect(page.locator(".trend-entry")).toHaveCount(6);
+  await expect(page.locator(".lead-topic")).toContainText("Whitefield");
+  await expect(page.locator(".lead-evidence")).toContainText("Confidence");
+  await expect(page.getByRole("heading", { name: "Source stream" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "EXPLAINABLE MOMENTUM" })).toBeVisible();
   await page.screenshot({ path: ".cache/dashboard-desktop.png", fullPage: true });
-  await page.getByRole("textbox", { name: "Search topics" }).fill("metro");
-  await expect(page.locator(".trend-row")).toHaveCount(1);
-  await page.getByRole("link", { name: "Namma Metro", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search topics" }).fill("metro");
+  await expect(page.locator(".trend-entry")).toHaveCount(1);
+  await page.locator(".lead-topic h3").getByRole("link", { name: "Namma Metro" }).click();
   await expect(page.getByRole("heading", { name: "Namma Metro", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Behind the score" })).toBeVisible();
   await expect(page.getByText("Demo topic · fictional evidence, real deterministic scoring.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Example evidence" })).toBeVisible();
-  expect(errors).toEqual([]);
-  expect(backendRequests).toEqual([]);
+  expect(errors).toEqual([]); expect(backendRequests).toEqual([]);
 });
-test("filters, empty states and public API work", async ({ page, request }) => {
+
+test("all category, time and source controls query consistent models and clear empty states", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Filter by category" }).selectOption("Weather");
-  await expect(page.locator(".trend-row")).toHaveCount(1);
-  await page.getByRole("textbox", { name: "Search topics" }).fill("impossible-query");
+  const categories = page.getByRole("group", { name: "Topic categories" });
+  for (const [name, count] of [["Civic", 0], ["Traffic", 2], ["Tech", 1], ["Business", 0], ["Culture", 0], ["Food", 1], ["Events", 1], ["Weather", 1], ["Sports", 0], ["All", 6]] as const) {
+    const read = page.waitForResponse((r) => r.url().includes("/api/pulse?"));
+    await categories.getByRole("button", { name, exact: true }).click(); await read;
+    await expect(page.locator(".trend-entry")).toHaveCount(count);
+    await expect(categories.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+  }
+  for (const [window, count] of [["6H", 119], ["24H", 221], ["2H", 79]] as const) {
+    const read = page.waitForResponse((r) => r.url().includes("/api/pulse?"));
+    await page.getByRole("group", { name: "Activity time window" }).getByRole("button", { name: window, exact: true }).click(); await read;
+    await expect(page.locator(".source-stream .panel-overline")).toContainText(count + " SIGNALS");
+    await expect(page.locator(".lead-topic")).toContainText("vs previous 2h");
+  }
+  const read = page.waitForResponse((r) => r.url().includes("source=hackernews"));
+  await page.getByRole("combobox", { name: "Filter by source" }).selectOption("hackernews"); await read;
+  for (const row of await page.locator(".stream-source-name").all()) await expect(row).toHaveText("Hacker News");
+  await page.getByRole("searchbox", { name: "Search topics" }).fill("impossible-query");
   await expect(page.getByRole("heading", { name: "No matching conversations" })).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.locator(".trend-row")).toHaveCount(6);
-  const response = await request.get("/api/pulse"); expect(response.status()).toBe(200);
-  const data = await response.json();
-  expect(data.mode).toBe("demo"); expect(data.version).toBe("v2");
-  expect(data.topTopics[0].current2h).toBeGreaterThanOrEqual(2);
-  expect(data.topTopics[0].growthRatio).toBe((data.topTopics[0].current2h + 1) / (data.topTopics[0].previous2h + 1));
-  expect(["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"]).toContain(data.topTopics[0].lifecycle);
-  expect((await request.get("/api/ingest")).status()).toBe(401);
-  expect((await request.get("/api/topics/missing")).status()).toBe(404);
+  await expect(page.locator(".trend-entry")).toHaveCount(6);
+  await expect(page.getByRole("combobox", { name: "Filter by source" })).toHaveValue("");
 });
-test("pages are accessible and fit a narrow viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/", "/topic/namma-metro", "/about"]) {
-    await page.goto(path);
-    await expect(page.locator("h1")).toBeVisible();
+
+test("history, accessible data tables, neighborhood exploration and evidence expansion work", async ({ page }) => {
+  await page.goto("/");
+  const chart = page.locator(".momentum-panel");
+  await expect(chart.locator(".momentum-chart")).toBeVisible();
+  await chart.locator(".momentum-chart").scrollIntoViewIfNeeded();
+  await expect(chart.locator(".recharts-line-curve")).toBeVisible();
+  const plot = await chart.locator(".momentum-chart").boundingBox();
+  if (!plot) throw new Error("Score chart did not render");
+  await page.mouse.move(plot.x + plot.width * 0.75, plot.y + plot.height * 0.5);
+  await expect(chart.locator(".recharts-tooltip-wrapper")).toBeVisible();
+  await chart.getByText("View score history as a table", { exact: true }).click();
+  await expect(chart.locator("tbody tr")).toHaveCount(49);
+  await chart.getByRole("button", { name: "Signals", exact: true }).click();
+  await expect(chart.locator("tbody tr")).toHaveCount(24);
+  await chart.getByRole("combobox", { name: "Chart topic" }).selectOption("rain-and-waterlogging");
+  await chart.getByRole("button", { name: "Pulse Score", exact: true }).click();
+  await expect(chart.getByRole("link", { name: "Inspect Rain & waterlogging" })).toBeVisible();
+  await expect(chart.getByText("View score history as a table", { exact: true })).toBeVisible();
+  await expect(chart.locator("tbody tr")).toHaveCount(49);
+  const point = page.getByRole("button", { name: /^Indiranagar: .*Select neighborhood/ });
+  await point.focus(); await page.keyboard.press("Enter");
+  await expect(page.locator(".neighborhood-selected h3")).toHaveText("Indiranagar");
+  await page.getByRole("group", { name: "Neighborhood activity" }).getByRole("button", { name: /Hebbal/ }).click();
+  await expect(page.locator(".neighborhood-selected h3")).toHaveText("Hebbal");
+  await page.route("https://*.tile.openstreetmap.org/**", (route) => route.abort());
+  await page.getByText("Open street map", { exact: true }).click();
+  await expect(page.locator(".hotspot-map")).toBeVisible();
+  await expect(page.locator(".map-fallback")).toContainText("Base map tiles unavailable");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await page.locator(".leaflet-overlay-pane path.leaflet-interactive").first().click();
+  await expect(page.locator(".leaflet-popup-content")).toContainText("Whitefield");
+  await expect(page.locator(".leaflet-popup-content")).toContainText("18 distinct neighborhood mentions");
+  await page.getByText("Open street map", { exact: true }).click();
+  await expect(page.locator(".hotspot-map")).toHaveCount(0);
+  const stream = page.locator(".source-stream");
+  await expect(stream.locator(".stream-list li")).toHaveCount(6);
+  await stream.getByRole("button", { name: "Show 24 more signals" }).click();
+  await expect(stream.locator(".stream-list li")).toHaveCount(30);
+  for (const link of await stream.locator(".stream-evidence a").all()) {
+    await expect(link).toHaveAttribute("href", /^https:\/\//);
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(link).toContainText("fictional example link");
+  }
+  await stream.getByRole("button", { name: "Show fewer signals" }).click();
+  await expect(stream.locator(".stream-list li")).toHaveCount(6);
+  await page.getByRole("navigation", { name: "Footer navigation" }).getByRole("link", { name: "Sources", exact: true }).click();
+  await expect(page.locator("#sources")).toBeVisible();
+});
+
+test("failed reads preserve evidence and retry, while loading and racing filters stay coherent", async ({ page }) => {
+  await page.goto("/");
+  let fail = true;
+  await page.route("**/api/pulse?**", async (route) => {
+    if (fail) await route.fulfill({ status: 500, json: { error: "unavailable" } });
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.getByRole("button", { name: "Retry read" })).toBeVisible();
+  await expect(page.locator(".trend-entry")).toHaveCount(6);
+  fail = false;
+  await page.getByRole("button", { name: "Retry read" }).click();
+  await expect(page.getByRole("button", { name: "Retry read" })).toHaveCount(0);
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/pulse?**category=weather", async (route) => { await gate; await route.continue().catch(() => undefined); });
+  await page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Weather", exact: true }).click();
+  await expect(page.getByRole("status", { name: "" }).filter({ hasText: "Loading filtered trends" })).toBeVisible();
+  await page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Food", exact: true }).click();
+  await expect(page.locator(".lead-topic h3")).toHaveText("Food & cafés");
+  release();
+  await expect(page.locator(".lead-topic .topic-kicker")).toContainText("Food");
+  await expect(page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Food", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("score history handles outages and recovers without hiding signal activity", async ({ page }) => {
+  await page.goto("/");
+  let fail = true;
+  await page.route("**/api/topics/rain-and-waterlogging", (route) => fail ? route.fulfill({ status: 503, json: { error: "Unavailable" } }) : route.continue());
+  await page.getByRole("combobox", { name: "Chart topic" }).selectOption("rain-and-waterlogging");
+  await expect(page.getByText("Score history could not be loaded.")).toBeVisible();
+  await page.getByRole("button", { name: "View signal activity" }).click();
+  await expect(page.getByText("Distinct signals per hour · IST")).toBeVisible();
+  await page.getByRole("button", { name: "Pulse Score", exact: true }).click();
+  fail = false; await page.getByRole("button", { name: "Retry history" }).click();
+  await expect(page.getByText("View score history as a table", { exact: true })).toBeVisible();
+});
+
+test("LIVE requires actual fresh successful-ingestion metadata and expires honestly", async ({ page, request }) => {
+  const data = await (await request.get("/api/pulse")).json();
+  const now = new Date().toISOString();
+  const live = { ...data, mode: "live", status: "healthy", generatedAt: now, evaluatedAt: now, stale: false, notice: null,
+    lastSuccessfulIngestion: now, snapshot: { ...data.snapshot, capturedAt: now, evaluatedAt: now, stale: false },
+    sources: data.sources.map((s: object) => ({ ...s, status: "ok", stale: false, checkedAt: now })) };
+  await page.clock.install();
+  await page.goto("/");
+  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: live }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.locator(".live-indicator")).toContainText("LIVE");
+  await page.clock.fastForward(46 * 60_000);
+  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+});
+
+test("desktop, tablet and mobile are accessible without overflow or hydration errors", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (message) => { if (message.type() === "error" && /hydrat|server rendered|did not match/i.test(message.text())) errors.push(message.text()); });
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 950 }); await page.goto("/");
+    await expect(page.locator(".lead-topic h3")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
     expect(results.violations).toEqual([]);
-    if (path === "/") await page.screenshot({ path: ".cache/dashboard-mobile.png", fullPage: true });
-    if (path === "/topic/namma-metro") await page.screenshot({ path: ".cache/topic-mobile.png", fullPage: true });
+    if ([1440, 768, 390].includes(width)) await page.screenshot({ path: ".cache/dashboard-" + width + ".png", fullPage: true });
   }
+  for (const path of ["/topic/namma-metro", "/about"]) {
+    await page.setViewportSize({ width: 390, height: 844 }); await page.goto(path);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
+  }
+  expect(errors).toEqual([]);
 });
-test("unconfigured live mode shows honest empty data and fails operational health", async ({ page, request }) => {
+
+test("unconfigured live mode is delayed, empty and operationally unavailable", async ({ page, request }) => {
   await page.goto("http://127.0.0.1:3001/");
   await expect(page.getByRole("heading", { name: "Waiting for a pulse" })).toBeVisible();
-  await expect(page.getByText("Demo snapshot.", { exact: true })).toHaveCount(0);
-  await expect(page.locator(".trend-row")).toHaveCount(0);
+  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await expect(page.locator(".mode-notice")).not.toContainText("DEMO");
+  await expect(page.locator(".trend-entry")).toHaveCount(0);
+  await expect(page.locator(".stat-updated dd")).toContainText("Pending");
   const response = await request.get("http://127.0.0.1:3001/api/pulse");
-  expect(response.status()).toBe(503);
-  const data = await response.json();
-  expect(data.mode).toBe("live"); expect(data.generatedAt).toBeNull();
-  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
-  const health = await request.get("http://127.0.0.1:3001/api/health"); expect(health.status()).toBe(503);
+  expect(response.status()).toBe(503); expect((await response.json()).generatedAt).toBeNull();
+  await page.getByRole("button", { name: "Check for an update" }).click();
+  await expect(page.getByRole("heading", { name: "Waiting for a pulse" })).toBeVisible();
+  const health = await request.get("http://127.0.0.1:3001/api/health");
+  expect(health.status()).toBe(503);
   expect(await health.json()).toMatchObject({ application: { status: "ok" }, database: { status: "unconfigured" }, recentSignalCount: null });
 });
-test("public query routes expose filtered, bounded models and proper errors", async ({ request }) => {
+
+test("public query contracts keep bounded evidence, fixed scoring and proper errors", async ({ request }) => {
   for (const [window, signalCount] of [["2h", 79], ["6h", 119], ["24h", 221]] as const) {
     const response = await request.get("/api/pulse?window=" + window); expect(response.status()).toBe(200);
     const data = await response.json(); expect(data.signalCount).toBe(signalCount); expect(data.snapshot.scoringWindow).toBe("2h");
     expect(data.sourceStream).toHaveLength(30); expect(data.sourceStream[0]).not.toHaveProperty("sourceId");
     expect(data.topTopics[0]).not.toHaveProperty("evidence");
   }
-  const filtered = await (await request.get("/api/pulse?window=6h&category=Weather&source=gdelt")).json();
-  expect(filtered.topTopics).toHaveLength(1); expect(filtered.topTopics[0].sourceCount).toBe(3);
-  expect(filtered.sourceStream.every((s: { source: string }) => s.source === "gdelt")).toBe(true);
+  const food = await (await request.get("/api/pulse?window=6h&category=food&source=gdelt")).json();
+  expect(food.topTopics).toHaveLength(1); expect(food.topTopics[0]).toMatchObject({ sourceCount: 3, semanticCategory: "food", neighborhood: "Indiranagar" });
+  expect(food.sourceStream.every((s: { source: string }) => s.source === "gdelt")).toBe(true);
   const detail = await (await request.get("/api/topics/namma-metro")).json();
-  expect(detail.history[0].algorithmVersion).toBe("v2"); expect(detail.sourceEvidence).toHaveLength(30);
+  expect(detail.history.at(-1).algorithmVersion).toBe("v2"); expect(detail.sourceEvidence).toHaveLength(30);
   expect(detail.relatedSignals.length).toBeGreaterThan(0); expect(detail.topic).not.toHaveProperty("method");
-  const spots = await (await request.get("/api/hotspots?category=Weather")).json();
-  expect(spots.hotspots[0]).toMatchObject({ neighborhood: "Hebbal", topTopic: { slug: "rain-and-waterlogging" }, averagePulse: expect.any(Number) });
+  expect((await request.get("/api/ingest")).status()).toBe(401);
+  expect((await request.get("/api/topics/missing")).status()).toBe(404);
   expect((await request.get("/api/pulse?window=3h")).status()).toBe(400);
   expect((await request.get("/api/pulse?source=gdelt&source=bluesky")).status()).toBe(400);
   expect((await request.post("/api/pulse")).status()).toBe(405);

@@ -8,11 +8,12 @@ import type { ReadState, ReadRepository } from "@/lib/db/read-repository";
 import { topicRecordSchema, type ItemRecord, type IngestionRun } from "@/lib/db/records";
 import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { topicSnapshot } from "@/lib/trends/snapshots";
+import { legacySemanticCategory, type EnrichmentResult } from "@/lib/domain/enrichment";
 
 export const STALE_MS = 90 * 60000;
 const order = (a: PublicTopic, b: PublicTopic) => b.score - a.score || b.velocity - a.velocity || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
 export function emptyReadState(now: Date): ReadState {
-  return { mode: "live", loadedAt: now.toISOString(), snapshot: null, topics: [], items: [], sourceRuns: [],
+  return { mode: "live", loadedAt: now.toISOString(), snapshot: null, topics: [], items: [], sourceRuns: [], semanticCategories: {},
     lastIngestion: null, lastSuccessfulIngestion: null, history: [], historyTruncated: false };
 }
 export function demoReadState(now: Date, slug?: string): ReadState {
@@ -26,8 +27,14 @@ export function demoReadState(now: Date, slug?: string): ReadState {
   const items = data.observations.map((o) => fromSignal(o, { topicId: "demo-" + o.topicSlug, category: topics.find((t) => t.slug === o.topicSlug)!.category,
     localRelevance: 1, enrichmentStatus: "completed", neighborhood: o.neighborhood, isFixture: true }));
   const descriptor = topics.find((t) => t.slug === slug);
+  const fixtureCategories: Record<string, EnrichmentResult["category"]> = { "namma-metro": "traffic", "rain-and-waterlogging": "weather",
+    "startup-ecosystem": "technology", "food-and-cafes": "food", "traffic-and-commutes": "traffic", "arts-and-events": "events" };
   return { ...emptyReadState(now), mode: "demo", topics, items, snapshot,
-    history: descriptor ? [topicSnapshot(descriptor.id, data.observations.filter((o) => o.topicSlug === slug), now, undefined, undefined, toDomainTopic(descriptor))] : [] };
+    semanticCategories: Object.fromEntries(topics.map((t) => [t.id, fixtureCategories[t.slug] ?? "other"])),
+    // Replay the deterministic engine against only fixture evidence available at each time.
+    history: descriptor ? Array.from({ length: 49 }, (_, index) => topicSnapshot(descriptor.id,
+      data.observations.filter((o) => o.topicSlug === slug), new Date(now.getTime() - (48 - index) * HOUR / 2),
+      undefined, undefined, toDomainTopic(descriptor))) : [] };
 }
 export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now: Date, mode: Pulse["mode"]) {
   return sources.map((source) => {
@@ -69,7 +76,13 @@ export function metricTopics(state: ReadState, query: ReadQuery, now: Date) {
   return evaluateTopics(state.topics.map(toDomainTopic), evidence, now).map((t) => {
     const { method: _method, currentCount: _current, baselineCount: _baseline, totalCount: _total, evidence: _evidence, ...safe } = t;
     void _method; void _current; void _baseline; void _total; void _evidence;
-    return { public: publicTopicSchema.parse({ ...safe, activityCount: selected(t.evidence, { ...query, source: undefined }, now).length }), evidence: t.evidence };
+    const record = state.topics.find((r) => r.slug === t.slug)!;
+    const located = selected(t.evidence, { ...query, source: undefined }, now).filter((o) => o.neighborhood);
+    const mentions = new Map<string, number>();
+    for (const o of located) mentions.set(o.neighborhood!, (mentions.get(o.neighborhood!) ?? 0) + 1);
+    const neighborhood = [...mentions].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? record.neighborhood;
+    return { public: publicTopicSchema.parse({ ...safe, activityCount: selected(t.evidence, { ...query, source: undefined }, now).length,
+      semanticCategory: state.semanticCategories[record.id] ?? legacySemanticCategory[record.category], neighborhood }), evidence: t.evidence };
   });
 }
 function hotspotRows(topics: ReturnType<typeof metricTopics>, query: ReadQuery, now: Date) {
@@ -87,8 +100,9 @@ function hotspotRows(topics: ReturnType<typeof metricTopics>, query: ReadQuery, 
       topPulse: top.score, topTopic: { slug: top.slug, title: top.title, pulseScore: top.score } });
   }).sort((a, b) => b.activity - a.activity || a.neighborhood.localeCompare(b.neighborhood));
 }
+const categoryMatches = (topic: PublicTopic, category: ReadQuery["category"]) => !category || topic.category === category || topic.semanticCategory === category;
 function topicCandidates(state: ReadState, query: ReadQuery, now: Date) {
-  return metricTopics(state, query, now).filter((t) => t.public.activityCount >= 2 && (!query.category || t.public.category === query.category)
+  return metricTopics(state, query, now).filter((t) => t.public.activityCount >= 2 && categoryMatches(t.public, query.category)
     && (!query.source || selected(t.evidence, query, now).length > 0)).sort((a, b) => order(a.public, b.public));
 }
 export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
@@ -101,7 +115,11 @@ export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, 
       excerpt: i.excerpt, text: i.excerpt, domain: i.domain, sourceType: i.source === "gdelt" ? "news" as const : i.source === "bluesky" ? "social" as const : "tech" as const,
       publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind,
       topicSlug: state.topics.find((t) => t.id === i.topicId)?.slug ?? "unenriched", neighborhood: i.neighborhood })), now);
-  const stream = selected(streams, query, now).filter((o) => !query.category || byId.get(o.id)?.category === query.category)
+  const stream = selected(streams, query, now).filter((o) => {
+    if (!query.category) return true;
+    const item = byId.get(o.id)!, topic = state.topics.find((t) => t.id === item.topicId);
+    return topic && (topic.category === query.category || (state.semanticCategories[topic.id] ?? legacySemanticCategory[topic.category]) === query.category);
+  })
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   let status: Pulse["status"] = state.mode === "demo" ? "demo" : !state.snapshot ? "unavailable" : state.snapshot.status;
   if (status === "healthy" && (snapshot.stale || snapshot.refreshDelayed || sourceStatuses.some((s) => s.stale || s.status !== "ok"))) status = "degraded";
@@ -118,7 +136,7 @@ export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, 
     topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, state.topics)),
     signalCount: stream.length, streamTruncated: stream.length > 30, sources: sourceStatuses, availableSources: available(sourceStatuses),
     lastSuccessfulIngestion: state.mode === "demo" ? null : state.lastSuccessfulIngestion?.finishedAt ?? null,
-    hotspots: hotspotRows(state.snapshot ? metricTopics(state, query, now).filter((t) => !query.category || t.public.category === query.category) : [], query, now) });
+    hotspots: hotspotRows(state.snapshot ? metricTopics(state, query, now).filter((t) => categoryMatches(t.public, query.category)) : [], query, now) });
 }
 export function projectTopicList(state: ReadState, query: TopicListQuery, now: Date, failureNotice?: string) {
   const dashboard = projectDashboard(state, query, now, failureNotice);

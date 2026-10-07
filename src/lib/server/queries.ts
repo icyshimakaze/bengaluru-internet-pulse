@@ -18,8 +18,8 @@ async function loadLive(slug?: string) {
     throw new Error("READ_UNAVAILABLE");
   }
 }
-const cachedLive = unstable_cache(() => loadLive(), ["pulse-read-v1"], { revalidate: READ_REVALIDATE_SECONDS });
-const cachedTopic = unstable_cache((slug: string) => loadLive(slug), ["pulse-topic-read-v1"], { revalidate: READ_REVALIDATE_SECONDS });
+const cachedLive = unstable_cache(() => loadLive(), ["pulse-read-v2"], { revalidate: READ_REVALIDATE_SECONDS });
+const cachedTopic = unstable_cache((slug: string) => loadLive(slug), ["pulse-topic-read-v2"], { revalidate: READ_REVALIDATE_SECONDS });
 const readContext = cache(async () => {
   const now = new Date();
   try {

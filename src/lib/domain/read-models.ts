@@ -1,9 +1,12 @@
 import { z } from "zod";
 import { categorySchema, sourceSchema, sourceTypeSchema, slugSchema, neighborhoodSchema, httpUrlSchema,
   trendSchema, pulseSchema, hotspotSchema, sourceStatusSchema, trendLifecycleSchema } from "./schema";
+import { semanticCategorySchema } from "./enrichment";
 
+// Retain the original editorial buckets for existing API consumers.
+export const readCategorySchema = z.union([semanticCategorySchema, categorySchema]);
 export const readQuerySchema = z.object({ window: z.enum(["2h", "6h", "24h"]).default("2h"),
-  category: categorySchema.optional(), source: sourceSchema.optional() }).strict();
+  category: readCategorySchema.optional(), source: sourceSchema.optional() }).strict();
 export type ReadQuery = z.infer<typeof readQuerySchema>;
 export type ReadQueryInput = z.input<typeof readQuerySchema>;
 export const topicListQuerySchema = readQuerySchema.extend({ q: z.string().max(100).optional(), lifecycle: trendLifecycleSchema.optional(),
@@ -15,7 +18,8 @@ export const publicSignalSchema = z.object({ id: z.string().min(1), source: sour
   neighborhood: neighborhoodSchema.nullable(), enrichmentStatus: z.enum(["pending", "completed", "failed"]) }).strict();
 export type PublicSignal = z.infer<typeof publicSignalSchema>;
 export const publicTopicSchema = trendSchema.omit({ method: true, currentCount: true, baselineCount: true, totalCount: true, evidence: true })
-  .extend({ activityCount: z.number().int().nonnegative() }).strict();
+  .extend({ activityCount: z.number().int().nonnegative(), semanticCategory: semanticCategorySchema,
+    neighborhood: neighborhoodSchema.nullable() }).strict();
 export type PublicTopic = z.infer<typeof publicTopicSchema>;
 export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).extend({ stale: z.boolean(),
   ingestionStatus: z.enum(["running", "completed", "partial", "failed", "abandoned"]).nullable() }).strict();
@@ -31,7 +35,7 @@ export const publicHotspotSchema = hotspotSchema.extend({ activity: z.number().i
   topTopic: z.object({ slug: slugSchema, title: z.string(), pulseScore: z.number().min(0).max(100) }).strict() }).strict();
 export type PublicHotspot = z.infer<typeof publicHotspotSchema>;
 export const dashboardSchema = pulseSchema.omit({ trends: true, hotspots: true, sources: true }).extend({
-  window: readQuerySchema.shape.window, filters: z.object({ category: categorySchema.nullable(), source: sourceSchema.nullable() }).strict(),
+  window: readQuerySchema.shape.window, filters: z.object({ category: readCategorySchema.nullable(), source: sourceSchema.nullable() }).strict(),
   topTopics: z.array(publicTopicSchema).max(50), risingTopics: z.array(publicTopicSchema).max(50),
   topicsTruncated: z.boolean(), sourceStream: z.array(publicSignalSchema).max(30), streamTruncated: z.boolean(),
   signalCount: z.number().int().nonnegative(), snapshot: snapshotInfoSchema,

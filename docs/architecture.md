@@ -56,3 +56,7 @@ Server-side structured output supplies canonical topic identity, category, neigh
 Next.js, strict TypeScript, Tailwind, shadcn/ui primitives, Lucide, Recharts, React Leaflet, Zod, libSQL, Vitest, GitHub Actions and Vercel. Public routes: `/api/pulse`, `/api/topics`, `/api/topics/[slug]`, `/api/hotspots`, `/api/health`. Operational route: `GET /api/ingest`, protected by `CRON_SECRET` and suitable for Vercel cron; CLI: `npm run ingest`.
 
 Structured logs contain counts, durations, source and error codes, never API keys or raw posts. CI runs lint, tests, type checks and production build without live secrets or upstream dependencies.
+
+## Homepage product surface
+
+The editorial homepage consumes only validated public DTOs, including persisted semantic categories and explicitly mentioned neighborhoods. Server-backed activity/category/source controls preserve the fixed two-hour momentum equation. Recorded score history, hourly signal activity, geographic mention centers and original-source evidence are independently inspectable. The shared header derives LIVE/DELAYED from successful-ingestion freshness, and demo fixtures never qualify as live. See [Homepage](homepage.md) for interaction, failure, accessibility and fixture-history contracts.

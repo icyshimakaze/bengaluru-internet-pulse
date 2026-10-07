@@ -61,7 +61,7 @@ describe("public read API contracts", () => {
     expect(response.status).toBe(200);
     expect(data).toMatchObject({ summary: expect.any(String), pulseScore: expect.any(Number), confidence: expect.any(Number), lifecycle: "HOT",
       growth: { current2h: 24, previous2h: 5, ratio: 25 / 6 }, evidenceTruncated: true, historyTruncated: false });
-    expect(data.history[0]).toMatchObject({ algorithmVersion: "v2", pulseScore: data.pulseScore });
+    expect(data.history.at(-1)).toMatchObject({ algorithmVersion: "v2", pulseScore: data.pulseScore });
     expect(data.sourceEvidence).toHaveLength(30); expect(data.relatedSignals.length).toBeGreaterThan(0);
     expect(data.relatedSignals.every((s: { topicSlug: string }) => s.topicSlug !== "namma-metro")).toBe(true);
   });
