@@ -6,7 +6,7 @@ import { computeTrends, evaluateTopics, deduplicateEvidence, computeHotspots, HO
 import { upgradeLegacyPulse } from "@/lib/trends/compatibility";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { DataRepository, DAY, ITEM_RETENTION_DAYS, SNAPSHOT_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
-import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, legacyLifecycle, type ItemRecord, type TopicRecord } from "./records";
+import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, legacyLifecycle, type ItemRecord, type TopicRecord, type IngestionRun } from "./records";
 import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
 import { EnrichmentRepository, applyEnrichments } from "./enrichment-repository";
 import type { EnrichmentAssignment } from "@/lib/domain/enrichment";
@@ -42,7 +42,9 @@ export class Repository extends DataRepository {
     return { topics: topicRecords.map(toDomainTopic), observations: toObservations(items, topicRecords), topicRecords, items };
   }
 
-  async publish(inputTopics: Topic[], observations: Observation[], inputPulse: Pulse, owner: string, now = new Date(), options: PublishOptions = {}): Promise<{ inserted: number; pulse: Pulse }> {
+  async publish(inputTopics: Topic[], observations: Observation[], inputPulse: Pulse, owner: string, now = new Date(), options: PublishOptions = {}): Promise<{
+    inserted: number; pulse: Pulse; runs: IngestionRun[]; pruned: Awaited<ReturnType<DataRepository["pruneOldData"]>>;
+  }> {
     const template = pulseSchema.parse(inputPulse);
     if (!template.generatedAt) throw new Error("A persisted snapshot requires a collection timestamp");
     z.date().parse(now);
@@ -123,6 +125,7 @@ export class Repository extends DataRepository {
         if (Date.parse(t.lastSeenAt) >= captured.getTime() - SNAPSHOT_RETENTION_DAYS * DAY || topicEvidence.length)
           statements.push(snapshotInsert(topicSnapshot(t.id, topicEvidence, captured, metric, batchId, toDomainTopic(t))));
       }
+      const completedRuns: IngestionRun[] = [];
       for (const completion of options.runs ?? []) {
         const row = (await tx.execute({ sql: "SELECT * FROM ingestion_runs WHERE id=?", args: [completion.id] })).rows[0];
         if (!row) throw new Error("INGESTION_RUN_MISSING");
@@ -134,11 +137,16 @@ export class Repository extends DataRepository {
           errors: health.rejected + (health.failedQueries ?? (health.status === "error" ? 1 : 0)),
           status: health.status === "error" ? "failed" : health.status === "partial" || health.rejected ? "partial" : "completed",
           errorMessage: health.error ?? (health.rejected ? "VALIDATION_REJECTED" : null) });
+        completedRuns.push(run);
         statements.push({ sql: "UPDATE ingestion_runs SET finished_at=?,discovered=?,inserted=?,duplicates=?,errors=?,status=?,error_message=? WHERE id=?",
           args: [run.finishedAt, run.discovered, run.inserted, run.duplicates, run.errors, run.status, run.errorMessage, run.id] });
       }
-      await tx.batch([...statements, ...retentionStatements(now)]);
-      return { inserted, pulse };
+      const results = await tx.batch([...statements, ...retentionStatements(now)]);
+      const retention = results.slice(statements.length);
+      return { inserted, pulse, runs: completedRuns, pruned: {
+        items: retention[0]?.rowsAffected ?? 0, snapshots: retention[1]?.rowsAffected ?? 0,
+        pulseSnapshots: retention[2]?.rowsAffected ?? 0, ingestionRuns: retention[3]?.rowsAffected ?? 0, topics: retention[4]?.rowsAffected ?? 0,
+      } };
     });
   }
 

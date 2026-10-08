@@ -1,37 +1,54 @@
 name: Ingest public signals
 on:
+  workflow_dispatch:
+    inputs:
+      enrichment_mode:
+        description: "Topic matching provider (mock is free; openai explicitly opts into API usage)"
+        required: true
+        default: mock
+        type: choice
+        options:
+          - mock
+          - openai
+          - off
   schedule:
     - cron: "17,47 * * * *"
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: pulse-ingestion
+  group: pulse-production-ingestion
   cancel-in-progress: false
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      APP_DATA_MODE: live
-      ENRICHMENT_MODE: mock
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
-      - name: Check configuration
-        id: config
-        run: |
-          if [ -n "$TURSO_DATABASE_URL" ] && [ -n "$TURSO_AUTH_TOKEN" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Live ingestion skipped: configure the Turso repository secrets."
-          fi
-      - if: steps.config.outputs.ready == 'true'
+      - name: Install locked dependencies
         run: npm ci
-      - if: steps.config.outputs.ready == 'true'
-        run: npm run ingest
+      - name: Collect, enrich and publish momentum
+        id: ingest
+        timeout-minutes: 3
+        env:
+          # Secrets are scoped to ingestion, never dependency installation or action setup.
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          APP_DATA_MODE: live
+          ENRICHMENT_MODE: ${{ inputs.enrichment_mode || vars.PULSE_ENRICHMENT_MODE || 'mock' }}
+          ENRICHMENT_BATCH_SIZE: "10"
+          ENRICHMENT_MAX_ITEMS: "30"
+          SOURCE_TIMEOUT_MS: "8000"
+        run: npm run ingest -- --require-remote
+      - name: Report unsuccessful job
+        if: failure()
+        run: |
+          echo "::error::Scheduled ingestion failed. Check configuration, database access and the structured ingestion summary; no credentials are logged."

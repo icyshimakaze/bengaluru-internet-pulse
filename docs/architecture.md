@@ -53,7 +53,7 @@ Server-side structured output supplies canonical topic identity, category, neigh
 
 ## Delivery and operations
 
-Next.js, strict TypeScript, Tailwind, shadcn/ui primitives, Lucide, Recharts, React Leaflet, Zod, libSQL, Vitest, GitHub Actions and Vercel. Public routes: `/api/pulse`, `/api/topics`, `/api/topics/[slug]`, `/api/hotspots`, `/api/health`. Operational route: `GET /api/ingest`, protected by `CRON_SECRET` and suitable for Vercel cron; CLI: `npm run ingest`.
+Next.js, strict TypeScript, Tailwind, shadcn/ui primitives, Lucide, Recharts, React Leaflet, Zod, libSQL, Vitest, GitHub Actions and Vercel. Public routes: `/api/pulse`, `/api/topics`, `/api/topics/[slug]`, `/api/hotspots`, `/api/health`. Operational route: `GET /api/ingest`, protected by `CRON_SECRET` for authenticated operators; CLI: `npm run ingest`. Production scheduling uses GitHub Actions, not Vercel cron; see [Scheduled ingestion](scheduled-ingestion.md).
 
 Structured logs contain counts, durations, source and error codes, never API keys or raw posts. CI runs lint, tests, type checks and production build without live secrets or upstream dependencies.
 

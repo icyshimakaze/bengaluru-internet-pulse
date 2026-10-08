@@ -18,13 +18,17 @@ type Options = {
   adapters?: Record<(typeof sources)[number], SourceAdapter>;
   enrich?: typeof classifyAI;
 };
-export async function ingest(options: Options = {}): Promise<{ skipped: boolean; added: number; pulse: Pulse | null }> {
+export type IngestionResult = { skipped: boolean; added: number; pulse: Pulse | null;
+  runs: IngestionRun[]; pruned: Awaited<ReturnType<Repository["pruneOldData"]>> | null };
+export async function ingest(options: Options = {}): Promise<IngestionResult> {
   const now = options.now ?? new Date();
   const isFixture = options.mode === "demo";
   const repository = options.repository ?? new Repository(getDatabase());
-  await repository.initialize();
+  log("info", "ingest.started", { mode: isFixture ? "demo" : "live" });
+  const migrations = await repository.initialize();
+  log("info", "ingest.migrations", { applied: migrations.applied.length, version: migrations.version });
   const lease = await repository.acquireLease(now);
-  if (!lease) return { skipped: true, added: 0, pulse: null };
+  if (!lease) { log("warn", "ingest.skipped", { code: "LEASE_BUSY" }); return { skipped: true, added: 0, pulse: null, runs: [], pruned: null }; }
   const runs: IngestionRun[] = [];
   let health: SourceStatus[] = [];
   try {
@@ -46,8 +50,10 @@ export async function ingest(options: Options = {}): Promise<{ skipped: boolean;
     const added = await repository.enrichment.collectPending(unique.map((signal) => fromSignal(signal, {
       ingestionRunId: runs.find((r) => r.source === signal.source)!.id, isFixture,
     })), lease, options.now ?? new Date());
+    log("info", "ingest.collected", { returned: collected.length, unique: unique.length, inserted: added });
     const env = getEnv();
     const enrichmentMode = options.enrichmentMode ?? env.ENRICHMENT_MODE;
+    if (enrichmentMode === "openai" && !env.OPENAI_API_KEY) log("warn", "enrichment.unavailable", { code: "ENRICHMENT_KEY_MISSING", provider: enrichmentMode });
     const catalog = await repository.enrichment.activeTopics(now, isFixture);
     const queue = (enrichmentMode === "off" || enrichmentMode === "openai" && !env.OPENAI_API_KEY) && !options.enrich ? []
       : await repository.enrichment.claimPending(now, isFixture, env.ENRICHMENT_MAX_ITEMS, lease);
@@ -102,8 +108,14 @@ export async function ingest(options: Options = {}): Promise<{ skipped: boolean;
     const result = await repository.publish([...topics.values()], [], template, lease, options.now ?? new Date(), {
       items: [], enrichments: assignments, topicRecords: [...records.values()], runs: runs.map((r, i) => ({ id: r.id, health: health[i]! })),
     });
-    log("info", "ingest.completed", { added, ranked: result.pulse.trends.length, availableSources: available });
-    return { skipped: false, added, pulse: result.pulse };
+    for (const run of result.runs) log(run.status === "completed" ? "info" : "warn", "ingest.source_summary", {
+      source: run.source, status: run.status, discovered: run.discovered, inserted: run.inserted, duplicates: run.duplicates, errors: run.errors,
+    });
+    log("info", "ingest.completed", { status: result.pulse.status, added, ranked: result.pulse.trends.length, availableSources: available,
+      enrichmentProvider: enrichmentMode, enriched: assignments.length, pending: result.pulse.enrichment?.pending ?? 0,
+      prunedItems: result.pruned.items, prunedSnapshots: result.pruned.snapshots, prunedPulseSnapshots: result.pruned.pulseSnapshots,
+      prunedRuns: result.pruned.ingestionRuns, prunedTopics: result.pruned.topics });
+    return { skipped: false, added, pulse: result.pulse, runs: result.runs, pruned: result.pruned };
   } catch (error) {
     // Started runs survive failed publication; persist a terminal failure separately.
     for (const [i, run] of runs.entries()) {

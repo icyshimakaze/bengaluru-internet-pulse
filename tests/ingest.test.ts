@@ -7,6 +7,7 @@ import { type Source } from "@/lib/domain/schema";
 import { type SourceAdapter } from "@/lib/sources/adapters";
 import { now, observation, pulse } from "./helpers";
 import { classifyAI } from "@/lib/pipeline/ai";
+import { fromSignal } from "@/lib/db/mapping";
 const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { mode: "mock" });
 function adapters(failed?: Source): Record<Source, SourceAdapter> {
   const adapter = (source: Source): SourceAdapter => async () => {
@@ -30,6 +31,7 @@ describe("transactional pipeline", () => {
     const first = await ingest({ repository: repo, now, adapters: collected, timeoutMs: 1000, enrich: mock });
     expect(first.added).toBe(3);
     expect(first.pulse?.status).toBe("degraded");
+    expect(first.runs.find((r) => r.source === "gdelt")).toMatchObject({ status: "partial", discovered: 8, inserted: 1, duplicates: 3, errors: 5 });
     expect(first.pulse?.sources.find((s) => s.source === "gdelt")).toMatchObject({ status: "partial", failedQueries: 1, duplicates: 3 });
     expect((await repo.ingestionStatus({ source: "gdelt" }))[0]).toMatchObject({ status: "partial", discovered: 8, inserted: 1, duplicates: 3, errors: 5, errorMessage: "PARTIAL_QUERY_FAILURE" });
     const repeat = await ingest({ repository: repo, now, adapters: collected, timeoutMs: 1000, enrich: mock });
@@ -114,6 +116,21 @@ describe("transactional pipeline", () => {
     expect(runs).toHaveLength(6);
     expect(runs.slice(0, 3).every((r) => r.inserted === 0 && r.duplicates === 2 && r.status === "completed")).toBe(true);
     expect(runs.slice(3).every((r) => r.inserted === 2 && r.duplicates === 0)).toBe(true);
+  });
+  it("reports atomic retention and persists lifecycle/history after a successful run", async () => {
+    const repo = repository(); await repo.initialize();
+    const expired = fromSignal({ ...observation("expired-pending", 1), publishedAt: new Date(now.getTime() - 15 * 86400000).toISOString() });
+    await repo.insertItem(expired);
+    const result = await ingest({ repository: repo, now, adapters: adapters(), timeoutMs: 1000, enrich: mock });
+    expect(result.pruned).toMatchObject({ items: 1, snapshots: 0, pulseSnapshots: 0 });
+    expect((await repo.client.execute({ sql: "SELECT id FROM items WHERE id=?", args: [expired.id] })).rows).toEqual([]);
+    const stored = await repo.load(now);
+    expect(result.pulse!.trends.length).toBeGreaterThan(0);
+    for (const trend of result.pulse!.trends) {
+      const record = stored.topicRecords.find((t) => t.slug === trend.slug)!;
+      expect(record.lifecycle).toBe(trend.lifecycle);
+      expect((await repo.fetchTopicHistory(record.id))[0]).toMatchObject({ pulseScore: trend.score, lifecycle: trend.lifecycle });
+    }
   });
   it("isolates a failed source and falls back after AI failure", async () => {
     const repo = repository();

@@ -1,21 +1,26 @@
 import "./env";
 import { createClient, type Client } from "@libsql/client";
-import { mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { ingest } from "../src/lib/pipeline/ingest";
 import { getDatabase } from "../src/lib/db/client";
 import { Repository } from "../src/lib/db/repository";
 import { createAdapters } from "../src/lib/sources/adapters";
 import { FIXTURE_NOW } from "../src/fixtures/demo";
 import fixtures from "../src/fixtures/public-sources.json";
+import { parseIngestionArgs, requireRemoteDatabase, ingestionReport, failedIngestionReport, formatIngestionSummary, type IngestionReport } from "../src/lib/server/ingestion-report";
 
 let client: Client | undefined;
+let fixtureMode = false;
+function writeSummary(report: IngestionReport) {
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatIngestionSummary(report));
+}
 try {
-  const args = process.argv.slice(2);
-  if (args.some((arg) => !["--fixtures", "--help"].includes(arg))) throw new Error("INVALID_CLI_ARGUMENT");
-  if (args.includes("--help")) {
-    console.info("Usage: npm run ingest [-- --fixtures]\nLive: configured Turso database or local .data/pulse.db.\nFixtures: offline fictional signals in isolated .data/ingestion-fixtures.db.");
+  const args = parseIngestionArgs(process.argv.slice(2));
+  fixtureMode = args.fixtures;
+  if (args.help) {
+    console.info("Usage: npm run ingest [-- --fixtures | --require-remote]\nLive: configured Turso database or local .data/pulse.db.\nScheduled: --require-remote requires a remote database URL and token.\nFixtures: offline fictional signals in isolated .data/ingestion-fixtures.db.");
   } else {
-    const fixtureMode = args.includes("--fixtures");
+    if (args.requireRemote) requireRemoteDatabase(process.env);
     if (fixtureMode) {
       mkdirSync(".data", { recursive: true });
       client = createClient({ url: "file:.data/ingestion-fixtures.db" });
@@ -30,12 +35,18 @@ try {
     const result = await ingest({ repository: new Repository(client), ...(fixtureMode ? {
       mode: "demo", enrichmentMode: "mock", now: FIXTURE_NOW, timeoutMs: 1000, adapters,
     } : {}) });
-    console.info(JSON.stringify({ event: "cli.ingest", mode: result.pulse?.mode ?? (fixtureMode ? "demo" : "live"),
-      added: result.added, skipped: result.skipped, status: result.pulse?.status ?? "busy", enrichment: result.pulse?.enrichment, sources: result.pulse?.sources }));
-    if (result.pulse?.status === "unavailable") process.exitCode = 1;
+    const report = ingestionReport(result, fixtureMode);
+    console.info(JSON.stringify(report));
+    writeSummary(report);
+    // Upstream outages are recorded degraded runs. Storage/publication errors throw and fail below.
+    if (report.status === "degraded" && process.env.GITHUB_ACTIONS === "true") console.warn("::warning::Ingestion published with reduced source coverage or pending enrichment. See the source-count summary.");
   }
 } catch (error) {
-  console.error(JSON.stringify({ event: "cli.ingest.failed", code: error instanceof Error && error.message === "INVALID_CLI_ARGUMENT" ? error.message : "INGEST_FAILED",
-    hint: "Use --help for options; check database configuration and connectivity." }));
+  const report = failedIngestionReport(error, fixtureMode);
+  console.error(JSON.stringify(report));
+  if (process.env.GITHUB_ACTIONS === "true") console.error("::error::Ingestion failed. Check remote database configuration, migrations and connectivity.");
+  try { writeSummary(report); } catch { console.error(JSON.stringify({ event: "cli.summary.failed", code: "SUMMARY_WRITE_FAILED" })); }
   process.exitCode = 1;
-} finally { client?.close(); }
+} finally {
+  try { client?.close(); } catch { console.error(JSON.stringify({ event: "cli.database.close_failed", code: "DATABASE_CLOSE_FAILED" })); process.exitCode = 1; }
+}
