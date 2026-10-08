@@ -76,7 +76,7 @@ test("history, accessible data tables, neighborhood exploration and evidence exp
   await expect(page.locator(".neighborhood-selected h3")).toHaveText("Indiranagar");
   await page.getByRole("group", { name: "Neighborhood activity" }).getByRole("button", { name: /Hebbal/ }).click();
   await expect(page.locator(".neighborhood-selected h3")).toHaveText("Hebbal");
-  await page.route("https://*.tile.openstreetmap.org/**", (route) => route.abort());
+  await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
   await page.getByText("Open street map", { exact: true }).click();
   await expect(page.locator(".hotspot-map")).toBeVisible();
   await expect(page.locator(".map-fallback")).toContainText("Base map tiles unavailable");
@@ -84,7 +84,7 @@ test("history, accessible data tables, neighborhood exploration and evidence exp
   await page.getByRole("button", { name: "Zoom out", exact: true }).click();
   await page.locator(".leaflet-overlay-pane path.leaflet-interactive").first().click();
   await expect(page.locator(".leaflet-popup-content")).toContainText("Whitefield");
-  await expect(page.locator(".leaflet-popup-content")).toContainText("18 distinct neighborhood mentions");
+  await expect(page.locator(".leaflet-popup-content")).toContainText("18 recent signals");
   await page.getByText("Open street map", { exact: true }).click();
   await expect(page.locator(".hotspot-map")).toHaveCount(0);
   const stream = page.locator(".source-stream");
