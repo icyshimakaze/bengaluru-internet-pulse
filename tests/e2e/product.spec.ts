@@ -21,6 +21,7 @@ test("editorial homepage explains Bengaluru, momentum, evidence and honest demo 
   await expect(page.locator(".trend-entry")).toHaveCount(1);
   await page.locator(".lead-topic h3").getByRole("link", { name: "Namma Metro" }).click();
   await expect(page.getByRole("heading", { name: "Namma Metro", exact: true })).toBeVisible();
+  await page.getByText("How is the score calculated?", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "Behind the score" })).toBeVisible();
   await expect(page.getByText("Demo topic · fictional evidence, real deterministic scoring.")).toBeVisible();
   expect(errors).toEqual([]); expect(backendRequests).toEqual([]);

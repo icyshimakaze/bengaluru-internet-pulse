@@ -9,6 +9,7 @@ import { topicRecordSchema, type ItemRecord, type IngestionRun } from "@/lib/db/
 import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { legacySemanticCategory, type EnrichmentResult } from "@/lib/domain/enrichment";
+import { supportedLocation } from "@/lib/trends/topic-presentation";
 
 export const STALE_MS = 90 * 60000;
 const order = (a: PublicTopic, b: PublicTopic) => b.score - a.score || b.velocity - a.velocity || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
@@ -152,7 +153,7 @@ export function projectTopic(state: ReadState, slug: string, now: Date) {
   const byId = new Map(state.items.map((i) => [i.id, i]));
   const evidence = match.evidence.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, state.topics));
   const neighborhoods = new Set(match.evidence.flatMap((o) => o.neighborhood ? [o.neighborhood] : []));
-  const related = metrics.filter((t) => t.public.slug !== slug).flatMap((t) => t.evidence.filter((o) => t.public.category === match.public.category
+  const related = metrics.filter((t) => t.public.slug !== slug).flatMap((t) => t.evidence.filter((o) => t.public.semanticCategory !== "other" && t.public.semanticCategory === match.public.semanticCategory
     || o.neighborhood && neighborhoods.has(o.neighborhood))).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id)).slice(0, 12);
   const history = state.history.map((s) => historySnapshotSchema.parse({ capturedAt: s.capturedAt, algorithmVersion: s.algorithmVersion,
     count2h: s.count2h, previousCount2h: s.previousCount2h, count6h: s.count6h, count24h: s.count24h, sourceCount: s.sourceCount,
@@ -163,6 +164,7 @@ export function projectTopic(state: ReadState, slug: string, now: Date) {
     notice: dashboard.notice, snapshot: dashboard.snapshot, topic: t, summary: t.description, pulseScore: t.score,
     growth: { current2h: t.current2h, previous2h: t.previous2h, ratio: t.growthRatio, changePercent: t.growthPercent, capped: t.changeCapped },
     confidence: t.confidence, lifecycle: t.lifecycle, history, historyTruncated: state.historyTruncated, sourceEvidence: evidence,
+    locationEvidence: supportedLocation(match.evidence),
     evidenceTruncated: match.evidence.length > 30, relatedSignals: related.map((o) => publicSignal(byId.get(o.id)!, state.topics)) });
 }
 export function projectHealth(data: Awaited<ReturnType<ReadRepository["health"]>>, now: Date, databaseStatus: "ok" | "unconfigured" | "unavailable" | "not_required" = "ok", mode: Pulse["mode"] = "live") {

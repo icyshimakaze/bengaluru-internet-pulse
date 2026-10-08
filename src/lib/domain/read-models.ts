@@ -50,11 +50,21 @@ export const historySnapshotSchema = z.object({ capturedAt: z.iso.datetime(), al
   count2h: count, previousCount2h: count, count6h: count, count24h: count, sourceCount: count.max(3),
   pulseScore: z.number().min(0).max(100), confidence: factor, lifecycle: z.union([trendLifecycleSchema, z.literal("inactive")]),
   velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor }).strict();
+export type HistorySnapshot = z.infer<typeof historySnapshotSchema>;
+export const locationEvidenceSchema = z.object({
+  neighborhood: neighborhoodSchema.nullable(), status: z.enum(["supported", "mixed", "insufficient", "unknown"]),
+  mentionCount: count, locatedSignalCount: count, sourceCount: count.max(3),
+}).strict().refine((v) => (v.status === "supported") === (v.neighborhood !== null), "Only supported locations can name a neighborhood")
+  .refine((v) => v.mentionCount <= v.locatedSignalCount && v.sourceCount <= v.mentionCount, "Location evidence counts must be consistent")
+  .refine((v) => v.status !== "supported" || v.mentionCount >= 2 && v.sourceCount >= 2 && v.mentionCount / v.locatedSignalCount >= 0.6,
+    "Supported locations require corroborating explicit mentions");
+export type LocationEvidence = z.infer<typeof locationEvidenceSchema>;
 export const topicDetailSchema = z.object({ mode: z.enum(["live", "demo"]), status: pulseSchema.shape.status,
   generatedAt: z.iso.datetime().nullable(), stale: z.boolean(), notice: z.string().nullable(), snapshot: snapshotInfoSchema,
   topic: publicTopicSchema, summary: z.string().max(280), pulseScore: z.number().min(0).max(100),
   growth: z.object({ current2h: count, previous2h: count, ratio: z.number().positive(), changePercent: z.number().min(-100).max(300), capped: z.boolean() }).strict(),
   confidence: factor, lifecycle: trendLifecycleSchema, history: z.array(historySnapshotSchema).max(96), historyTruncated: z.boolean(),
+  locationEvidence: locationEvidenceSchema,
   sourceEvidence: z.array(publicSignalSchema).max(30), evidenceTruncated: z.boolean(), relatedSignals: z.array(publicSignalSchema).max(12),
 }).strict();
 export type TopicDetailData = z.infer<typeof topicDetailSchema>;

@@ -60,3 +60,5 @@ Structured logs contain counts, durations, source and error codes, never API key
 ## Homepage product surface
 
 The editorial homepage consumes only validated public DTOs, including persisted semantic categories and explicitly mentioned neighborhoods. Server-backed activity/category/source controls preserve the fixed two-hour momentum equation. Recorded score history, hourly signal activity, geographic mention centers and original-source evidence are independently inspectable. The shared header derives LIVE/DELAYED from successful-ingestion freshness, and demo fixtures never qualify as live. See [Homepage](homepage.md) for interaction, failure, accessibility and fixture-history contracts.
+
+The topic intelligence brief uses the same read boundary with snapshot-based momentum and explicit lifecycle milestones. Evidence-only explanations describe counts without inferring causes. A corroborated location projection distinguishes supported, mixed, insufficient and unknown places; titles and original links supply provenance without article bodies. See [Topic detail](topic-detail.md) for support thresholds, archival version isolation and route recovery states.
