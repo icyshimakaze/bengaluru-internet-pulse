@@ -57,6 +57,8 @@ Next.js, strict TypeScript, Tailwind, shadcn/ui primitives, Lucide, Recharts, Re
 
 Structured logs contain counts, durations, source and error codes, never API keys or raw posts. CI runs lint, tests, type checks and production build without live secrets or upstream dependencies.
 
+Scheduled ingestion checks required secret presence before installing dependencies. Missing setup produces an explicit `not_configured` warning and skips collection without changing freshness. Normal manual production dispatches require credentials and fail when they are missing; invalid configured credentials and database failures always fail the production job. An optional configuration-only dispatch inspects presence without collecting or testing connectivity.
+
 ## Homepage product surface
 
 The editorial homepage consumes only validated public DTOs, including persisted semantic categories and explicitly mentioned neighborhoods. Server-backed activity/category/source controls preserve the fixed two-hour momentum equation. Recorded score history, hourly signal activity, geographic mention centers and original-source evidence are independently inspectable. The shared header derives LIVE/DELAYED from successful-ingestion freshness, and demo fixtures never qualify as live. See [Homepage](homepage.md) for interaction, failure, accessibility and fixture-history contracts.

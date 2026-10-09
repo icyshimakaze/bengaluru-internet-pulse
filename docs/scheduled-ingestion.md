@@ -12,7 +12,9 @@ In GitHub **Settings → Secrets and variables → Actions**, configure reposito
 | `TURSO_AUTH_TOKEN` | Required database token with write access |
 | `OPENAI_API_KEY` | Optional; used only with explicit `openai` enrichment |
 
-Secrets are passed only to the ingestion step. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
+Database secrets are scoped to a dependency-free configuration check and the ingestion step. The optional OpenAI key is passed only to ingestion. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
+
+Before installing dependencies, `scripts/check-ingestion-config.mjs` checks whether both database secrets are nonempty. An unconfigured **scheduled** run emits a warning, explains the missing secret names in its summary, and skips all setup/collection steps. It does not claim a successful ingestion, poll sources, create an ephemeral database, or fabricate counts. Once both secrets exist, the schedule automatically starts the production pipeline. This presence check does not validate a URL, token, or connection; those failures remain visible in the production command.
 
 **Mock enrichment remains the default and makes no paid API calls**, even if `OPENAI_API_KEY` exists. It collects real public signals and labels the mock topic matching honestly. Manual dispatch offers `mock`, `openai` or `off`. Optionally set the repository Actions variable `PULSE_ENRICHMENT_MODE` for scheduled runs; `openai` is an explicit opt-in to Responses API usage with `gpt-6-luna`, while `off` retains pending signals without classification. Invalid modes fail validation. Missing OpenAI credentials preserve collected signals as pending.
 
@@ -23,7 +25,9 @@ gh workflow run ingest.yml --ref main -f enrichment_mode=mock
 gh run list --workflow ingest.yml --limit 5
 ```
 
-[GitHub schedules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) run the default branch and can be delayed; inactive public repositories may have schedules disabled. The product derives freshness from committed collection timestamps, never from the requested cron time. Manual dispatch requires the workflow file on the default branch; a run can select a branch. An absent database configuration intentionally makes the job fail, rather than appearing to ingest successfully.
+To check setup safely before obtaining database credentials, select **check_configuration** in the dispatch form, or run `gh workflow run ingest.yml --ref main -f check_configuration=true`. This operation checks secret presence only, always skips ingestion, and explicitly reports missing setup. The default is `false`; a normal manual production dispatch with missing credentials fails visibly.
+
+[GitHub schedules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) run the default branch and can be delayed; inactive public repositories may have schedules disabled. The product derives freshness from committed collection timestamps, never from the requested cron time. Manual dispatch requires the workflow file on the default branch; a run can select a branch. A configuration check or skipped unconfigured schedule never updates the application's freshness.
 
 ## Pipeline and durability
 
@@ -45,7 +49,10 @@ The fixed workflow concurrency group spans manual and scheduled runs, with `canc
 | Healthy collection and enrichment | Success, `completed` summary | Snapshot, lifecycle and retention commit together |
 | Partial or complete source outage | Success with warning, `degraded` summary; coverage can be `unavailable` | Failed providers are recorded, previous evidence is retained within retention, new data from available providers persists |
 | Missing/unavailable/malformed model output | Success with warning when backlog remains | New signals stay pending; failed results cannot enter scores or discard collection |
-| Missing/invalid remote database config | Failure, nonzero CLI exit | No source requests start; no silent runner-local database |
+| Missing secrets on a schedule | Warning, explicit `not_configured` summary; ingestion steps skipped | No installs, collection, database writes, or freshness updates |
+| Explicit configuration-only dispatch | Presence-check summary; ingestion steps skipped | No collection or database connectivity check |
+| Missing secrets on a normal manual dispatch | Failure, nonzero setup-check exit | No source requests start; missing secret names are listed |
+| Invalid configured remote database / direct production CLI missing config | Failure, nonzero CLI exit | No source requests start; no silent runner-local database |
 | Migration, DB read/write, publication or retention failure | Failure, nonzero CLI exit | Failed transaction rolls back; prior snapshots and separately committed pending collection survive |
 | Another collector owns the lease | Success with `skipped` summary | No overlapping collection or snapshot write |
 | Runner cancellation/timeout | Failure/cancellation | Committed pending signals survive; expiring lease and interrupted-run recovery allow later ingestion |
@@ -79,7 +86,7 @@ The CLI loads `.env.local`/`.env` without printing values and respects environme
 
 ## Workflow verification
 
-CI runs actionlint 1.7.12 (including its available shell checks) before the application checks. The workflow contracts additionally have parsed YAML tests for triggers, secret scope, bounded work, concurrency and no Vercel cron. CLI tests verify missing configuration fails before collection, logs redact diagnostics, and a real command writes its failed job summary. Transaction tests cover source/AI failures, publication failure, duplicate polls, lifecycle/history, leases and actual retention counts.
+CI runs actionlint 1.7.12 (including its available shell checks) before the application checks. The workflow contracts additionally have parsed YAML tests for triggers, setup ordering, conditional collection, secret scope, bounded work, concurrency and no Vercel cron. Real bootstrap-process tests distinguish unconfigured schedules, manual production failures, configured runs and configuration-only dispatches, and verify secret redaction. CLI tests verify missing configuration fails before collection, logs redact diagnostics, and a real command writes its failed job summary. Transaction tests cover source/AI failures, publication failure, duplicate polls, lifecycle/history, leases and actual retention counts.
 
 With actionlint installed, validate both workflow syntax and GitHub expressions using `actionlint`. An equivalent container command from the repository root is:
 

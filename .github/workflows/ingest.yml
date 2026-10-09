@@ -11,6 +11,11 @@ on:
           - mock
           - openai
           - off
+      check_configuration:
+        description: "Check secret presence only; do not collect signals or write data"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "17,47 * * * *"
 permissions:
@@ -20,6 +25,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   ingest:
+    name: Check configuration and ingest when ready
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,18 +33,28 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Check required database configuration
+        id: configuration
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          CHECK_CONFIGURATION: ${{ inputs.check_configuration || 'false' }}
+        run: node scripts/check-ingestion-config.mjs
       - name: Set up Node.js
+        if: steps.configuration.outputs.should_ingest == 'true'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
       - name: Install locked dependencies
+        if: steps.configuration.outputs.should_ingest == 'true'
         run: npm ci
       - name: Collect, enrich and publish momentum
         id: ingest
+        if: steps.configuration.outputs.should_ingest == 'true'
         timeout-minutes: 3
         env:
-          # Secrets are scoped to ingestion, never dependency installation or action setup.
+          # Secret values never enter dependency installation or action setup.
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
