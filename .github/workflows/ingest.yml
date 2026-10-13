@@ -3,11 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       enrichment_provider:
-        description: "Topic matching provider (heuristic is local; API providers use their own credentials)"
+        description: "Use repository ENRICHMENT_PROVIDER or override for this run"
         required: true
-        default: xkiro
+        default: repository
         type: choice
         options:
+          - repository
           - xkiro
           - heuristic
           - openai
@@ -60,10 +61,11 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
           APP_DATA_MODE: live
-          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
+          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
           ENRICHMENT_ENABLED: ${{ vars.ENRICHMENT_ENABLED || 'true' }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
-          XKIRO_BASE_URL: ${{ vars.XKIRO_BASE_URL || 'https://api.xkiro.com/v1' }}
+          # Empty model/base URL variables use application defaults; only the selected provider is validated.
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          XKIRO_BASE_URL: ${{ vars.XKIRO_BASE_URL }}
           XKIRO_MODEL: ${{ vars.XKIRO_MODEL }}
           AI_BATCH_SIZE: ${{ vars.AI_BATCH_SIZE || '10' }}
           MAX_AI_ITEMS_PER_RUN: ${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}

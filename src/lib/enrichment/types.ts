@@ -10,7 +10,7 @@ export interface EnrichmentProvider {
 }
 
 export class EnrichmentConfigurationError extends Error {
-  constructor(readonly provider: EnrichmentProviderName, readonly code: "OPENAI_API_KEY_MISSING" | "XKIRO_API_KEY_MISSING" | "XKIRO_MODEL_MISSING" | "XKIRO_MODEL_INVALID") {
+  constructor(readonly provider: EnrichmentProviderName, readonly code: "OPENAI_API_KEY_MISSING" | "OPENAI_MODEL_INVALID" | "XKIRO_API_KEY_MISSING" | "XKIRO_MODEL_MISSING" | "XKIRO_MODEL_INVALID" | "XKIRO_BASE_URL_INVALID") {
     super(`Enrichment configuration error: ${code}. This provider is unavailable; use the heuristic fallback.`);
     this.name = "EnrichmentConfigurationError";
   }

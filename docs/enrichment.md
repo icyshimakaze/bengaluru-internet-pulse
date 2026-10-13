@@ -22,7 +22,7 @@ AI_BATCH_SIZE=10
 MAX_AI_ITEMS_PER_RUN=30
 ```
 
-Use `ENRICHMENT_PROVIDER=openai` with `OPENAI_API_KEY` and optionally `OPENAI_MODEL` to switch to OpenAI. Use `ENRICHMENT_PROVIDER=heuristic` for keyless operation. Keys are optional at application startup and required only when constructing their selected provider. A selected provider with a missing key/model logs a sanitized configuration error and falls back to heuristic. `ENRICHMENT_ENABLED=false` deliberately leaves signals pending without consuming enrichment attempts.
+Use `ENRICHMENT_PROVIDER=openai` with `OPENAI_API_KEY` and optionally `OPENAI_MODEL` to switch to OpenAI. Use `ENRICHMENT_PROVIDER=heuristic` for keyless operation. Builds and read endpoints require neither API key, regardless of provider selection. Keys, model IDs and provider URLs are checked only when constructing the selected provider: xKiro ignores OpenAI configuration, and OpenAI ignores xKiro configuration. Blank model/base URL variables use application defaults; xKiro still needs its explicit vendor-prefixed model for API processing. A selected provider with missing or invalid configuration logs a sanitized configuration error and falls back to heuristic. `ENRICHMENT_ENABLED=false` deliberately leaves signals pending without consuming enrichment attempts.
 
 The new variables replace `ENRICHMENT_MODE`, `ENRICHMENT_BATCH_SIZE`, `ENRICHMENT_MAX_ITEMS` and `PULSE_ENRICHMENT_MODE`. Old mode/enable flags never implicitly activate a paid provider. Update deployment variables rather than relying on those retired names. All configuration is server-only; never set `NEXT_PUBLIC_OPENAI_API_KEY` or `NEXT_PUBLIC_XKIRO_API_KEY`.
 
@@ -66,6 +66,8 @@ Dashboard/API notices and CLI summaries report actual providers (`mixed` when a 
 ## GitHub configuration and verification
 
 Required database Secrets: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`. For xKiro add Secret `XKIRO_API_KEY` and Variables `ENRICHMENT_PROVIDER=xkiro`, `XKIRO_MODEL=vendor/model`. Optional Variables: `XKIRO_BASE_URL`, `AI_BATCH_SIZE`, `MAX_AI_ITEMS_PER_RUN`, `ENRICHMENT_ENABLED`. OpenAI instead needs Secret `OPENAI_API_KEY`, Variable `ENRICHMENT_PROVIDER=openai` and optionally `OPENAI_MODEL`. Heuristic needs no provider Secrets. API keys are scoped only to the ingestion step.
+
+Scheduled runs and the default manual `repository` selection honor `vars.ENRICHMENT_PROVIDER`. A manual provider choice overrides this Variable for that run; an absent Variable defaults the workflow to xKiro. The ingestion step reads both keys from Secrets and provider/model/base URL settings from Variables. Missing credentials for an unused provider have no effect. CI performs production builds with xKiro and OpenAI selected separately, with all provider keys and optional settings empty; neither build calls a model API.
 
 Tests mock both SDK protocols and consume no API credits. They cover factory choices, key/model errors, all required failure modes, fallback isolation, atomic schemas, prompt injection, heuristic entity/topic distinctions, batching, provenance, migration preservation, retention and idempotence. `npm run ingest -- --fixtures` forces heuristic processing and an isolated fixture database regardless of API configuration.
 

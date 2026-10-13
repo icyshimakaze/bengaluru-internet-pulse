@@ -1,21 +1,33 @@
 import "server-only";
+import { z } from "zod";
 import { getEnv, type ServerEnv } from "@/lib/server/env";
-import { enrichmentProviderSchema, vendorModelIdSchema, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
+import { enrichmentProviderSchema, modelIdSchema, vendorModelIdSchema, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
 import { OpenAIEnrichmentProvider } from "./openai";
 import { XKiroEnrichmentProvider } from "./xkiro";
 import { HeuristicEnrichmentProvider } from "./heuristic";
 import { EnrichmentConfigurationError, type EnrichmentProvider } from "./types";
+
+const xKiroBaseUrlSchema = z.url().refine((value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+  } catch { return false; }
+});
 
 export function getEnrichmentProvider(env: ServerEnv = getEnv(), override?: EnrichmentProviderName): EnrichmentProvider {
   const selected = enrichmentProviderSchema.parse(override ?? env.ENRICHMENT_PROVIDER);
   if (selected === "heuristic") return new HeuristicEnrichmentProvider();
   if (selected === "openai") {
     if (!env.OPENAI_API_KEY?.trim()) throw new EnrichmentConfigurationError(selected, "OPENAI_API_KEY_MISSING");
-    return new OpenAIEnrichmentProvider(env.OPENAI_API_KEY, env.OPENAI_MODEL);
+    const model = modelIdSchema.safeParse(env.OPENAI_MODEL);
+    if (!model.success) throw new EnrichmentConfigurationError(selected, "OPENAI_MODEL_INVALID");
+    return new OpenAIEnrichmentProvider(env.OPENAI_API_KEY, model.data);
   }
   if (!env.XKIRO_API_KEY?.trim()) throw new EnrichmentConfigurationError(selected, "XKIRO_API_KEY_MISSING");
   if (!env.XKIRO_MODEL?.trim()) throw new EnrichmentConfigurationError(selected, "XKIRO_MODEL_MISSING");
   const model = vendorModelIdSchema.safeParse(env.XKIRO_MODEL);
   if (!model.success) throw new EnrichmentConfigurationError(selected, "XKIRO_MODEL_INVALID");
-  return new XKiroEnrichmentProvider(env.XKIRO_API_KEY, env.XKIRO_BASE_URL, model.data);
+  const baseUrl = xKiroBaseUrlSchema.safeParse(env.XKIRO_BASE_URL);
+  if (!baseUrl.success) throw new EnrichmentConfigurationError(selected, "XKIRO_BASE_URL_INVALID");
+  return new XKiroEnrichmentProvider(env.XKIRO_API_KEY, baseUrl.data, model.data);
 }

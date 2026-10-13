@@ -18,7 +18,24 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
-      - run: npm run build
+      - name: Build with xKiro selected and no provider credentials
+        run: npm run build
+        env:
+          ENRICHMENT_PROVIDER: xkiro
+          OPENAI_API_KEY: ""
+          OPENAI_MODEL: ""
+          XKIRO_API_KEY: ""
+          XKIRO_BASE_URL: ""
+          XKIRO_MODEL: ""
+      - name: Build with OpenAI selected and no provider credentials
+        run: npm run build
+        env:
+          ENRICHMENT_PROVIDER: openai
+          OPENAI_API_KEY: ""
+          OPENAI_MODEL: ""
+          XKIRO_API_KEY: ""
+          XKIRO_BASE_URL: ""
+          XKIRO_MODEL: ""
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

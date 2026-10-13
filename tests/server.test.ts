@@ -15,11 +15,22 @@ describe("configuration and read safety", () => {
     expect(() => parseEnv({ ENRICHMENT_PROVIDER: "invalid" })).toThrow();
     expect(parseEnv({ OPENAI_MODEL: "different-model" }).OPENAI_MODEL).toBe("different-model");
     expect(parseEnv({ ENRICHMENT_PROVIDER: "xkiro" }).OPENAI_API_KEY).toBeUndefined();
-    expect(() => parseEnv({ XKIRO_BASE_URL: "http://insecure.example/v1" })).toThrow("HTTPS");
-    expect(() => parseEnv({ XKIRO_BASE_URL: "https://user:PRIVATE_TOKEN@api.example/v1" })).toThrow("credentials");
     expect(() => parseEnv({ TURSO_DATABASE_URL: "libsql://example.turso.io" })).toThrow("token");
     expect(() => parseEnv({ CRON_SECRET: "short" })).toThrow("32 characters");
     expect(() => parseEnv({ SOURCE_TIMEOUT_MS: "0" })).toThrow();
+  });
+  it.each(["openai", "xkiro", "heuristic"])("allows %s builds without either provider's credentials", (provider) => {
+    const env = parseEnv({ ENRICHMENT_PROVIDER: provider, OPENAI_API_KEY: "", XKIRO_API_KEY: "",
+      OPENAI_MODEL: "", XKIRO_BASE_URL: "", XKIRO_MODEL: "" });
+    expect(env.ENRICHMENT_PROVIDER).toBe(provider);
+    expect(env.OPENAI_API_KEY).toBeUndefined(); expect(env.XKIRO_API_KEY).toBeUndefined();
+    expect(env.OPENAI_MODEL).toBe("gpt-6-luna"); expect(env.XKIRO_BASE_URL).toBe("https://api.xkiro.com/v1");
+    expect(env.XKIRO_MODEL).toBeUndefined();
+  });
+  it("treats blank repository variables as absent while rejecting unknown provider names", () => {
+    expect(parseEnv({ ENRICHMENT_PROVIDER: "", OPENAI_MODEL: " ", XKIRO_BASE_URL: "\t" })).toMatchObject({
+      ENRICHMENT_PROVIDER: "heuristic", OPENAI_MODEL: "gpt-6-luna", XKIRO_BASE_URL: "https://api.xkiro.com/v1" });
+    expect(() => parseEnv({ ENRICHMENT_PROVIDER: "unknown" })).toThrow("ENRICHMENT_PROVIDER");
   });
   it("rejects missing and incorrect bearer tokens", () => {
     const secret = "a".repeat(32);

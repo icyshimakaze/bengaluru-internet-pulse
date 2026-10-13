@@ -1,5 +1,12 @@
 # Validation record
 
+## Independent provider configuration, 13 October 2026
+
+- `npm run lint`, `npm run typecheck` and actionlint: passed.
+- `npm test`: 277 tests passed across 21 files. Added mocked coverage for missing/invalid unused provider configuration, selected-provider model/URL validation, redacted configuration fallback, blank GitHub Variables and workflow defaults.
+- `npm run build`: passed twice, separately selecting `xkiro` and `openai` with both provider keys and optional model/base URL settings blank. CI now repeats these builds without provider Secrets.
+- Manual dispatch defaults to repository provider selection; explicit per-run overrides remain available. No real source/model API requests or API credits were used for this change.
+
 ## Multi-provider enrichment, 13 October 2026
 
 - `npm run lint`, `npm run typecheck` and `npm run build`: passed.

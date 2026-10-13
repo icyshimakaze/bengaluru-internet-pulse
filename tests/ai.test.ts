@@ -55,6 +55,43 @@ describe("three enrichment providers and safe fallback", () => {
     expect(construct).toHaveBeenCalledWith({ apiKey: "PRIVATE_XKIRO_KEY", baseURL: "https://api.xkiro.com/v1", timeout: 8000, maxRetries: 0 });
     expect(parse).not.toHaveBeenCalled();
   });
+  it("processes xKiro without an OpenAI key and ignores unused OpenAI configuration", async () => {
+    select("xkiro"); vi.stubEnv("OPENAI_API_KEY", ""); vi.stubEnv("OPENAI_MODEL", "invalid unused model");
+    const signal = observation("a"); create.mockResolvedValue(chat([item(signal)]));
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("xkiro");
+    expect(construct).toHaveBeenCalledTimes(1); expect(construct.mock.calls[0]![0]).toHaveProperty("apiKey", "PRIVATE_XKIRO_KEY");
+    expect(parse).not.toHaveBeenCalled();
+  });
+  it("processes OpenAI without xKiro credentials, a model or a usable base URL", async () => {
+    select("openai"); vi.stubEnv("XKIRO_API_KEY", ""); vi.stubEnv("XKIRO_MODEL", "");
+    vi.stubEnv("XKIRO_BASE_URL", "invalid unused URL");
+    const signal = observation("a"); parse.mockResolvedValue(response([item(signal)]));
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("openai");
+    expect(construct).toHaveBeenCalledTimes(1); expect(construct.mock.calls[0]![0]).toHaveProperty("apiKey", "PRIVATE_OPENAI_KEY");
+    expect(create).not.toHaveBeenCalled();
+  });
+  it("validates the effective override rather than the unused configured provider", () => {
+    const env = parseEnv({ ENRICHMENT_PROVIDER: "xkiro", OPENAI_API_KEY: "PRIVATE_OPENAI_KEY",
+      XKIRO_BASE_URL: "invalid unused URL" });
+    expect(getEnrichmentProvider(env, "openai").name).toBe("openai");
+    expect(getEnrichmentProvider(env, "heuristic").name).toBe("heuristic");
+    expect(construct).toHaveBeenCalledTimes(1);
+  });
+  it.each(["not a URL", "http://insecure.example/v1", "https://user:PRIVATE_TOKEN@api.example/v1",
+    "https://api.example/v1?key=PRIVATE_TOKEN", "https://api.example/v1#fragment"])("rejects selected xKiro URL %s without leaking it or constructing a client", async (url) => {
+    select("xkiro"); vi.stubEnv("XKIRO_BASE_URL", url);
+    expect(() => getEnrichmentProvider()).toThrow("XKIRO_BASE_URL_INVALID");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {}), signal = observation("a");
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("heuristic");
+    expect(construct).not.toHaveBeenCalled(); expect(JSON.stringify(warn.mock.calls)).not.toContain("PRIVATE_TOKEN");
+  });
+  it("rejects a selected invalid OpenAI model through sanitized heuristic fallback", async () => {
+    select("openai"); vi.stubEnv("OPENAI_MODEL", "invalid PRIVATE_MODEL with spaces");
+    expect(() => getEnrichmentProvider()).toThrow("OPENAI_MODEL_INVALID");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {}), signal = observation("a");
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("heuristic");
+    expect(construct).not.toHaveBeenCalled(); expect(JSON.stringify(warn.mock.calls)).not.toContain("PRIVATE_MODEL");
+  });
   it.each(["openai", "xkiro"] as const)("reports missing %s credentials and processes with heuristic only", async (provider) => {
     select(provider); vi.stubEnv(provider === "openai" ? "OPENAI_API_KEY" : "XKIRO_API_KEY", "");
     expect(() => getEnrichmentProvider()).toThrow(provider === "openai" ? "OPENAI_API_KEY_MISSING" : "XKIRO_API_KEY_MISSING");

@@ -49,15 +49,27 @@ describe("production ingestion workflow", () => {
     expect(source).not.toMatch(/printenv|set -x|continue-on-error|NEXT_PUBLIC_|ready=true/);
     expect(job.steps.some((s) => s.if === "failure()" && s.run?.includes("::error::"))).toBe(true);
   });
-  it("selects xKiro for the intended deployment, keeps all three providers, and reads models and quotas from variables", () => {
-    expect(workflow.on.workflow_dispatch.inputs.enrichment_provider).toMatchObject({ default: "xkiro", options: ["xkiro", "heuristic", "openai"] });
+  it("honors repository provider selection by default and reads provider configuration from variables", () => {
+    expect(workflow.on.workflow_dispatch.inputs.enrichment_provider).toMatchObject({ default: "repository", options: ["repository", "xkiro", "heuristic", "openai"] });
     const env = workflow.jobs.ingest.steps.find((s) => s.id === "ingest")!.env!;
-    expect(env.ENRICHMENT_PROVIDER).toContain("vars.ENRICHMENT_PROVIDER || 'xkiro'");
+    expect(env.ENRICHMENT_PROVIDER).toBe("${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}");
     expect(env.MAX_AI_ITEMS_PER_RUN).toBe("${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}");
     expect(env.AI_BATCH_SIZE).toBe("${{ vars.AI_BATCH_SIZE || '10' }}"); expect(env.SOURCE_TIMEOUT_MS).toBe("8000");
     expect(env.XKIRO_MODEL).toBe("${{ vars.XKIRO_MODEL }}");
-    expect(env.XKIRO_BASE_URL).toContain("https://api.xkiro.com/v1");
-    expect(env.OPENAI_MODEL).toContain("vars.OPENAI_MODEL");
+    expect(env.XKIRO_BASE_URL).toBe("${{ vars.XKIRO_BASE_URL }}");
+    expect(env.OPENAI_MODEL).toBe("${{ vars.OPENAI_MODEL }}");
+  });
+  it("builds both API selections in CI without any provider secrets or models", () => {
+    const ci = parseDocument(readFileSync(".github/workflows/ci.yml", "utf8"));
+    const config = z.object({ jobs: z.object({ verify: z.object({ steps: z.array(step) }) }) }).parse(ci.toJS());
+    const builds = config.jobs.verify.steps.filter((s) => s.run === "npm run build");
+    expect(builds.map((s) => s.env?.ENRICHMENT_PROVIDER)).toEqual(["xkiro", "openai"]);
+    for (const build of builds) {
+      for (const name of ["OPENAI_API_KEY", "XKIRO_API_KEY", "OPENAI_MODEL", "XKIRO_BASE_URL", "XKIRO_MODEL"]) {
+        expect(build.env?.[name]).toBe("");
+      }
+      expect(JSON.stringify(build)).not.toContain("secrets.");
+    }
   });
   it("validates workflow syntax in CI and has no dependency on Vercel cron", () => {
     const ci = parseDocument(readFileSync(".github/workflows/ci.yml", "utf8"));
