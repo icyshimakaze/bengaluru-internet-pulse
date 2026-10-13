@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { LIVE_BASE_URL } from "./urls";
 
 test("topic brief grounds its narrative in evidence and exposes snapshot history", async ({ page, request }) => {
   const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
@@ -97,7 +98,7 @@ test("missing and invalid slugs have a useful archive state; storage failures ca
     await expect(page.getByRole("heading", { name: "This topic isn't in the archive." })).toBeVisible();
     await expect(page.getByRole("link", { name: "Read the methodology" })).toBeVisible();
   }
-  await page.goto("http://127.0.0.1:3001/topic/namma-metro");
+  await page.goto(`${LIVE_BASE_URL}/topic/namma-metro`);
   await expect(page.getByRole("heading", { name: "This brief couldn't be loaded." })).toBeVisible();
   const retry = page.waitForResponse((r) => r.url().includes("/topic/namma-metro") && r.request().resourceType() === "fetch");
   await page.getByRole("button", { name: "Retry topic" }).click(); await retry;

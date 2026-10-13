@@ -13,7 +13,7 @@ GDELT / Bluesky public AppView / Hacker News Algolia
   → deadline + bounded retry → Zod payload validation
   → normalized observations with source, URL, text and publication time
   → URL/content dedupe → durable pending libSQL items
-  → batched semantic enrichment (mock by default; optional Responses API)
+  → batched semantic enrichment (OpenAI / xKiro / heuristic)
   → canonical topics + validated assignments + per-source ingestion runs
   → deterministic rolling-window engine
   → atomic, versioned snapshots + source health
@@ -49,7 +49,11 @@ Public reads use one consistent libSQL read batch, a 15-second server cache and 
 
 ## AI contract
 
-Server-side structured output supplies canonical topic identity, category, neighborhood, Bengaluru relevance, a short factual summary and classification confidence. The default mock provider costs nothing; the explicit OpenAI provider uses Responses with `gpt-6-luna`. Both use the same validation boundary. Source content is untrusted data and never modifies instructions. Failures leave durable pending items rather than fabricated classifications. AI cannot write scores, trend confidence, ranking or lifecycle. See [Semantic enrichment](enrichment.md) for schemas, batching, provenance, deadlines and retry limits.
+`EnrichmentProvider` is the server-only batch interface. `getEnrichmentProvider()` selects `OpenAIEnrichmentProvider`, `XKiroEnrichmentProvider`, or `HeuristicEnrichmentProvider` using the validated `ENRICHMENT_PROVIDER` enum. OpenAI remains supported through the official Responses API; xKiro uses the official OpenAI client against its compatible Chat Completions endpoint and preserves the configured vendor-prefixed model ID. Local development defaults to heuristic processing without accounts. The intended production configuration selects xKiro through environment variables.
+
+All providers produce the same Zod-validated semantic results: canonical identity, category, explicit neighborhood, local relevance, extractive summary and classification confidence. Static instructions and untrusted signal/catalog JSON remain separate. The heuristic performs real text normalization, keyword/entity extraction, conservative topic similarity and factual summary extraction. Neither AI nor heuristic classification assigns trend scores, ranking, trend confidence or lifecycle.
+
+Missing provider credentials, authentication/access failures, rate limits, upstream failures, deadlines and invalid responses fall back only to the heuristic for that batch. Providers never fail over to another API service. Batch validation is atomic, and collected items are committed before enrichment. Successfully processed items are excluded from future claims. Per-item actual provider/model provenance and per-run selected/actual providers, counts, errors and fallback counts commit with snapshots. Historic mock records keep their original provenance. See [Semantic enrichment](enrichment.md) for configuration, validation and limits.
 
 ## Delivery and operations
 

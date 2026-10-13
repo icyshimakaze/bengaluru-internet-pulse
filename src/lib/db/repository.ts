@@ -10,6 +10,7 @@ import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, legacyLifecycl
 import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
 import { EnrichmentRepository, applyEnrichments } from "./enrichment-repository";
 import type { EnrichmentAssignment } from "@/lib/domain/enrichment";
+import { enrichmentRunSchema } from "@/lib/domain/enrichment-providers";
 
 export type PublishOptions = {
   items?: ItemRecord[];
@@ -109,6 +110,15 @@ export class Repository extends DataRepository {
       const parent = await tx.execute({ sql: "INSERT INTO pulse_snapshots(id,captured_at,mode,payload) VALUES (?,?,?,?) ON CONFLICT(mode,captured_at) DO UPDATE SET payload=excluded.payload RETURNING id",
         args: [randomUUID(), capturedAt, pulse.mode, JSON.stringify(pulse)] });
       const batchId = String(parent.rows[0]!.id);
+      if (pulse.enrichment?.run) {
+        const report = enrichmentRunSchema.parse(pulse.enrichment.run);
+        const enriched = options.enrichments ?? [];
+        if (report.aiEnriched !== enriched.filter((a) => a.provider !== "heuristic").length ||
+            report.heuristicEnriched !== enriched.filter((a) => a.provider === "heuristic").length) throw new Error("ENRICHMENT_RUN_COUNTER_MISMATCH");
+        await tx.execute({ sql: `INSERT INTO enrichment_runs(id,pulse_snapshot_id,captured_at,mode,payload) VALUES (?,?,?,?,?)
+          ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`,
+          args: [options.runs?.[0]?.id ?? randomUUID(), batchId, capturedAt, pulse.mode, JSON.stringify(report)] });
+      }
       const statements = [];
       for (const t of storedTopics) {
         const metric = metrics.get(t.slug)!;

@@ -11,17 +11,20 @@ In GitHub **Settings → Secrets and variables → Actions**, configure reposito
 | `TURSO_DATABASE_URL` | Required persistent remote `libsql://` or `https://` database URL; local `file:` storage is rejected |
 | `TURSO_AUTH_TOKEN` | Required database token with write access |
 | `OPENAI_API_KEY` | Optional; used only with explicit `openai` enrichment |
+| `XKIRO_API_KEY` | Required for successful xKiro processing; missing keys use heuristic fallback |
 
-Database secrets are scoped to a dependency-free configuration check and the ingestion step. The optional OpenAI key is passed only to ingestion. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
+Database secrets are scoped to a dependency-free configuration check and the ingestion step. OpenAI/xKiro keys are passed only to ingestion and used only by the selected provider. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
 
 Before installing dependencies, `scripts/check-ingestion-config.mjs` checks whether both database secrets are nonempty. An unconfigured **scheduled** run emits a warning, explains the missing secret names in its summary, and skips all setup/collection steps. It does not claim a successful ingestion, poll sources, create an ephemeral database, or fabricate counts. Once both secrets exist, the schedule automatically starts the production pipeline. This presence check does not validate a URL, token, or connection; those failures remain visible in the production command.
 
-**Mock enrichment remains the default and makes no paid API calls**, even if `OPENAI_API_KEY` exists. It collects real public signals and labels the mock topic matching honestly. Manual dispatch offers `mock`, `openai` or `off`. Optionally set the repository Actions variable `PULSE_ENRICHMENT_MODE` for scheduled runs; `openai` is an explicit opt-in to Responses API usage with `gpt-6-luna`, while `off` retains pending signals without classification. Invalid modes fail validation. Missing OpenAI credentials preserve collected signals as pending.
+The intended deployment selects **xKiro**, and manual/scheduled workflow defaults reflect that. Set Actions Variables `ENRICHMENT_PROVIDER=xkiro` and `XKIRO_MODEL` to a model your account supports, preserving its `vendor/model` prefix. `XKIRO_BASE_URL` defaults to `https://api.xkiro.com/v1`. Optional Variables: `AI_BATCH_SIZE` (default/max 10), `MAX_AI_ITEMS_PER_RUN` (default/max 30), and `ENRICHMENT_ENABLED` (default `true`).
 
-Enable repository Actions if disabled and keep the workflow on the default branch. Run **Actions → Ingest public signals → Run workflow**, choosing `mock` for free matching. An optional GitHub CLI equivalent is:
+Manual dispatch offers `xkiro`, `heuristic` or `openai`; scheduled runs read `vars.ENRICHMENT_PROVIDER`. To use OpenAI later, change this Variable to `openai`, add `OPENAI_API_KEY` and optionally set `OPENAI_MODEL` (default `gpt-6-luna`). To use only local free normalization, select `heuristic`; no provider key is needed. Missing provider credentials, invalid model selection or provider failures use **heuristic only**, never another API provider. No tests or configuration-only dispatches call either API. Set `ENRICHMENT_ENABLED=false` to collect pending signals without enrichment. Unknown provider names fail configuration validation. Retired `PULSE_ENRICHMENT_MODE`/`ENRICHMENT_MODE` variables do not select a provider.
+
+Enable repository Actions if disabled and keep the workflow on the default branch. Run **Actions → Ingest public signals → Run workflow**, choosing `heuristic` for local matching or `xkiro` for the configured deployment. An optional GitHub CLI equivalent is:
 
 ```sh
-gh workflow run ingest.yml --ref main -f enrichment_mode=mock
+gh workflow run ingest.yml --ref main -f enrichment_provider=heuristic
 gh run list --workflow ingest.yml --limit 5
 ```
 
@@ -48,7 +51,7 @@ The fixed workflow concurrency group spans manual and scheduled runs, with `canc
 | --- | --- | --- |
 | Healthy collection and enrichment | Success, `completed` summary | Snapshot, lifecycle and retention commit together |
 | Partial or complete source outage | Success with warning, `degraded` summary; coverage can be `unavailable` | Failed providers are recorded, previous evidence is retained within retention, new data from available providers persists |
-| Missing/unavailable/malformed model output | Success with warning when backlog remains | New signals stay pending; failed results cannot enter scores or discard collection |
+| Missing/unavailable/malformed API provider output | Success with warning, explicit heuristic fallback | Valid heuristic assignments persist with actual provenance; if heuristic validation also fails, items remain pending |
 | Missing secrets on a schedule | Warning, explicit `not_configured` summary; ingestion steps skipped | No installs, collection, database writes, or freshness updates |
 | Explicit configuration-only dispatch | Presence-check summary; ingestion steps skipped | No collection or database connectivity check |
 | Missing secrets on a normal manual dispatch | Failure, nonzero setup-check exit | No source requests start; missing secret names are listed |
@@ -57,7 +60,7 @@ The fixed workflow concurrency group spans manual and scheduled runs, with `canc
 | Another collector owns the lease | Success with `skipped` summary | No overlapping collection or snapshot write |
 | Runner cancellation/timeout | Failure/cancellation | Committed pending signals survive; expiring lease and interrupted-run recovery allow later ingestion |
 
-Logs include source query health and terminal `ingest.source_summary` records with source, status, discovered, inserted, duplicates and errors. `ingest.completed` adds ranked topics, available sources, enrichment counts and actual pruning counts. A strict allowlisted `cli.ingest`/`cli.ingest.failed` JSON report and a Markdown job summary omit storage IDs, raw exceptions, titles, excerpts, credentials and database URLs. Failure counts are unknown when storage has failed, rather than fabricated zeros. No `continue-on-error` hides database errors. The final failure step adds a generic GitHub error annotation; degraded completed runs receive warning annotations.
+Logs include source query health and terminal `ingest.source_summary` records with source, status, discovered, inserted, duplicates and errors. `ingest.completed` adds ranked topics, available sources, selected/actual enrichment providers, AI/heuristic item counts, provider errors, fallback counts and actual pruning counts. These enrichment-run counters commit with the snapshot in `enrichment_runs`. A strict allowlisted `cli.ingest`/`cli.ingest.failed` JSON report and a Markdown job summary omit storage IDs, raw exceptions, titles, excerpts, credentials and database URLs. Failure counts are unknown when storage has failed, rather than fabricated zeros. No `continue-on-error` hides database errors. The final failure step adds a generic GitHub error annotation; degraded completed runs receive warning annotations.
 
 ## Reproduce locally
 
@@ -68,9 +71,9 @@ npm ci
 npm run ingest -- --fixtures
 ```
 
-This uses the checked-in GDELT/Bluesky/HN fixtures, a fixed fixture clock, free mock enrichment and `.data/ingestion-fixtures.db`. It applies migrations, executes the complete pipeline, reports retention and persists only labeled demo data. Repeating the command does not duplicate signals or re-enrich completed items.
+This uses the checked-in GDELT/Bluesky/HN fixtures, a fixed fixture clock, free genuine heuristic enrichment and `.data/ingestion-fixtures.db`. It applies migrations, executes the complete pipeline, reports retention and persists only labeled demo data. It overrides API provider choices and cannot send model requests. Repeating the command does not duplicate signals or re-enrich completed items.
 
-For real public collection into local storage, copy `.env.example` to ignored `.env.local`, keep `ENRICHMENT_MODE=mock`, set `APP_DATA_MODE=live` and `TURSO_DATABASE_URL=file:.data/pulse.db`, then run:
+For real public collection into local storage, copy `.env.example` to ignored `.env.local`, keep `ENRICHMENT_PROVIDER=heuristic`, set `APP_DATA_MODE=live` and `TURSO_DATABASE_URL=file:.data/pulse.db`, then run:
 
 ```sh
 npm run ingest

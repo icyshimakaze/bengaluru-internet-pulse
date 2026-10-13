@@ -1,16 +1,17 @@
 import "server-only";
 import { z } from "zod";
 import type { Client, Transaction } from "@libsql/client";
-import { enrichmentTopicSchema, enrichmentResultSchema, enrichmentProviderSchema, semanticCategorySchema, legacySemanticCategory,
-  editorialCategory, validateEnrichment, PRODUCTION_MODEL, type EnrichmentAssignment, type EnrichmentTopic } from "@/lib/domain/enrichment";
+import { enrichmentTopicSchema, enrichmentResultSchema, semanticCategorySchema, legacySemanticCategory,
+  editorialCategory, validateEnrichment, type EnrichmentAssignment, type EnrichmentTopic } from "@/lib/domain/enrichment";
+import { storedEnrichmentProviderSchema, enrichmentProviderSchema, validProviderModel, modelIdSchema, enrichmentRunSchema } from "@/lib/domain/enrichment-providers";
 import { itemRecordSchema, type ItemRecord, type TopicRecord } from "./records";
 import { itemInsert, itemFromRow, toSignal } from "./mapping";
 import { writeTransaction, DAY } from "./data-repository";
 
 export const enrichmentRecordSchema = z.object({
-  itemId: z.string().min(1).max(200), provider: enrichmentProviderSchema, model: z.literal(PRODUCTION_MODEL).nullable(),
+  itemId: z.string().min(1).max(200), provider: storedEnrichmentProviderSchema, model: modelIdSchema.nullable(),
   result: enrichmentResultSchema, enrichedAt: z.iso.datetime(),
-}).strict().refine((v) => v.itemId === v.result.signal_id && (v.provider === "mock" ? v.model === null : v.model === PRODUCTION_MODEL), "Invalid enrichment provenance");
+}).strict().refine((v) => v.itemId === v.result.signal_id && validProviderModel(v.provider, v.model), "Invalid enrichment provenance");
 export type EnrichmentRecord = z.infer<typeof enrichmentRecordSchema>;
 
 async function verifyLease(tx: Transaction, owner: string, now: Date) {
@@ -60,6 +61,11 @@ export class EnrichmentRepository {
     return row ? enrichmentRecordSchema.parse({ itemId: row.item_id, provider: row.provider, model: row.model,
       result: JSON.parse(String(row.payload)), enrichedAt: row.enriched_at }) : null;
   }
+  async recentRuns(mode: "demo" | "live" = "live", limit = 20) {
+    z.enum(["demo", "live"]).parse(mode); z.number().int().min(1).max(100).parse(limit);
+    const rows = await this.client.execute({ sql: "SELECT captured_at,payload FROM enrichment_runs WHERE mode=? ORDER BY captured_at DESC,rowid DESC LIMIT ?", args: [mode, limit] });
+    return rows.rows.map((row) => ({ capturedAt: z.iso.datetime().parse(row.captured_at), report: enrichmentRunSchema.parse(JSON.parse(String(row.payload))) }));
+  }
 }
 
 export async function applyEnrichments(tx: Transaction, assignments: EnrichmentAssignment[], topics: TopicRecord[], isFixture: boolean, now: Date): Promise<void> {
@@ -69,6 +75,7 @@ export async function applyEnrichments(tx: Transaction, assignments: EnrichmentA
   const catalog = topics.map((t) => enrichmentTopicSchema.parse({ id: t.id, slug: t.slug, canonical_label: t.canonicalLabel,
     category: metadata.get(t.id) ?? proposed.get(t.id) ?? legacySemanticCategory[t.category] }));
   for (const assignment of assignments) {
+    enrichmentProviderSchema.parse(assignment.provider);
     const row = (await tx.execute({ sql: "SELECT * FROM items WHERE id=? AND is_fixture=?", args: [assignment.result.signal_id, Number(isFixture)] })).rows[0];
     if (!row) throw new Error("ENRICHMENT_ITEM_MISSING");
     const item = itemFromRow(row);
@@ -81,9 +88,9 @@ export async function applyEnrichments(tx: Transaction, assignments: EnrichmentA
     if (result.local_relevance >= 0.5 && (!topic || topic.slug !== result.slug || topic.canonicalLabel !== result.canonical_label || topic.category !== editorialCategory[result.category] ||
       result.existing_topic_id !== null && result.existing_topic_id !== topic.id)) throw new Error("ENRICHMENT_ASSIGNMENT_MISMATCH");
     const neighborhood = result.neighborhood === "Citywide" || result.neighborhood === "Unknown" ? null : result.neighborhood;
-    await tx.execute({ sql: `UPDATE items SET topic_id=?,category=?,neighborhood=?,local_relevance=?,enrichment_status=?
+    await tx.execute({ sql: `UPDATE items SET topic_id=?,category=?,neighborhood=?,local_relevance=?,enrichment_status=?,enrichment_provider=?
       WHERE id=? AND is_fixture=? AND enrichment_status IN ('pending','failed')`, args: [topic?.id ?? null, topic?.category ?? null, neighborhood,
-      result.local_relevance, result.local_relevance >= 0.5 ? "completed" : "irrelevant", item.id, Number(isFixture)] });
+      result.local_relevance, result.local_relevance >= 0.5 ? "completed" : "irrelevant", record.provider, item.id, Number(isFixture)] });
     await tx.execute({ sql: `INSERT INTO item_enrichments(item_id,provider,model,payload,classification_confidence,enriched_at) VALUES (?,?,?,?,?,?)
       ON CONFLICT(item_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,payload=excluded.payload,classification_confidence=excluded.classification_confidence,enriched_at=excluded.enriched_at`,
       args: [record.itemId, record.provider, record.model, JSON.stringify(record.result), record.result.confidence, record.enrichedAt] });

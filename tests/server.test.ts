@@ -7,13 +7,16 @@ import { HOUR } from "@/lib/trends/engine";
 describe("configuration and read safety", () => {
   it("defaults to explicitly labeled demo and validates server credentials", () => {
     expect(parseEnv({}).APP_DATA_MODE).toBe("demo");
-    expect(parseEnv({ AI_ENABLED: "true" }).ENRICHMENT_MODE).toBe("mock");
-    expect(parseEnv({ ENRICHMENT_MODE: "openai" }).OPENAI_API_KEY).toBeUndefined();
+    expect(parseEnv({ AI_ENABLED: "true" }).ENRICHMENT_PROVIDER).toBe("heuristic");
+    expect(parseEnv({ ENRICHMENT_PROVIDER: "openai" }).OPENAI_API_KEY).toBeUndefined();
     expect(parseEnv({}).OPENAI_MODEL).toBe("gpt-6-luna");
-    expect(() => parseEnv({ ENRICHMENT_BATCH_SIZE: "11" })).toThrow();
-    expect(() => parseEnv({ ENRICHMENT_MAX_ITEMS: "31" })).toThrow();
-    expect(() => parseEnv({ ENRICHMENT_MODE: "invalid" })).toThrow();
-    expect(() => parseEnv({ OPENAI_MODEL: "different-model" })).toThrow();
+    expect(() => parseEnv({ AI_BATCH_SIZE: "11" })).toThrow();
+    expect(() => parseEnv({ MAX_AI_ITEMS_PER_RUN: "31" })).toThrow();
+    expect(() => parseEnv({ ENRICHMENT_PROVIDER: "invalid" })).toThrow();
+    expect(parseEnv({ OPENAI_MODEL: "different-model" }).OPENAI_MODEL).toBe("different-model");
+    expect(parseEnv({ ENRICHMENT_PROVIDER: "xkiro" }).OPENAI_API_KEY).toBeUndefined();
+    expect(() => parseEnv({ XKIRO_BASE_URL: "http://insecure.example/v1" })).toThrow("HTTPS");
+    expect(() => parseEnv({ XKIRO_BASE_URL: "https://user:PRIVATE_TOKEN@api.example/v1" })).toThrow("credentials");
     expect(() => parseEnv({ TURSO_DATABASE_URL: "libsql://example.turso.io" })).toThrow("token");
     expect(() => parseEnv({ CRON_SECRET: "short" })).toThrow("32 characters");
     expect(() => parseEnv({ SOURCE_TIMEOUT_MS: "0" })).toThrow();

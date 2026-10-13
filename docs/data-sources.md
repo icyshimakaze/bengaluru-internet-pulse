@@ -28,9 +28,15 @@ Deduplicate by source identity, canonical URL and a versioned SHA-256 content fi
 
 ## CLI and fixtures
 
-`npm run ingest` uses the configured Turso URL or defaults to local `.data/pulse.db`, runs migrations and records one run per source. No source accounts or API keys are required. A completely unavailable collection is recorded and causes CLI exit code 1; partial coverage is persisted and reported without failing the whole command.
+`npm run ingest` uses the configured Turso URL or defaults to local `.data/pulse.db`, runs migrations and records one run per source. No source accounts or API keys are required. Partial or complete source outages publish degraded/unavailable coverage without crashing collection; database failures exit nonzero.
 
-`npm run ingest -- --fixtures` uses `src/fixtures/public-sources.json` and the fixed fixture clock, forces free local mock enrichment, bypasses all live source/OpenAI requests, and writes only to `.data/ingestion-fixtures.db`. Items, topics, runs and snapshots carry fixture/demo markers and are excluded from default live reads. Repeating the command adds no duplicate signals. Automated tests always inject fixtures or mocked responses, including malformed siblings, HTTP failures, stalled bodies, retries, limits and partial/all-source outages. Semantic matching and pending-data recovery are described in [Semantic enrichment](enrichment.md).
+`npm run ingest -- --fixtures` uses `src/fixtures/public-sources.json` and the fixed fixture clock, forces free genuine heuristic enrichment, bypasses all live source/OpenAI/xKiro requests, and writes only to `.data/ingestion-fixtures.db`. Items, topics, runs and snapshots carry fixture/demo markers and are excluded from default live reads. Repeating the command adds no duplicate signals. Automated tests always inject fixtures or mocked responses, including malformed siblings, HTTP failures, stalled bodies, retries, limits and partial/all-source outages. Semantic matching and pending-data recovery are described in [Semantic enrichment](enrichment.md).
+
+## Enrichment services are not evidence sources
+
+`ENRICHMENT_PROVIDER` selects `openai`, `xkiro` or `heuristic` after collection. OpenAI remains optional through the official Responses API. The intended deployment selects xKiro's OpenAI-compatible Chat Completions API, with `XKIRO_API_KEY`, `XKIRO_BASE_URL` (default `https://api.xkiro.com/v1`) and a configured vendor-prefixed `XKIRO_MODEL`. The local default is a keyless deterministic heuristic. These services normalize supplied metadata and do not contribute a fourth source or decide ranking.
+
+An unavailable API provider falls back only to heuristic. Source text and catalog labels remain untrusted input; every result passes strict Zod/context validation. Secrets stay in ingestion/server code. Per-item and per-run actual-provider provenance distinguishes xKiro success from heuristic fallback; no OpenAI usage is claimed merely because it is supported. No provider or fallback may invent evidence or discard collected data.
 
 Timeouts, retries for network failures/408/429/5xx, maximum response size and per-source statuses protect ingestion. Invalid records are counted. A valid empty result is distinct from a failed source. URL identity strips tracking parameters and fragments; Bluesky external embeds use their linked content URL for dedupe while retaining the public post permalink as provenance. Normalized text identity removes exact syndicated duplicates across sources. Only retained, deduplicated observations contribute to diversity.
 
@@ -42,6 +48,7 @@ The dashboard links to public source pages rather than republishing complete art
 - [Bluesky searchPosts lexicon](https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/searchPosts.json)
 - [Bluesky public AppView](https://docs.bsky.app/docs/advanced-guides/api-directory)
 - [Hacker News Algolia API](https://hn.algolia.com/api)
+- [xKiro compatible API](https://docs.xkiro.com/api/chat-completions/)
 
 Endpoint behavior and coverage may change. Source health is displayed alongside every snapshot.
 

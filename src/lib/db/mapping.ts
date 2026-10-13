@@ -7,7 +7,7 @@ export function itemFromRow(r: Row): ItemRecord {
   return itemRecordSchema.parse({ id: r.id, source: r.source, sourceId: r.source_id, canonicalUrl: r.canonical_url, originalUrl: r.original_url,
     title: r.title, excerpt: r.excerpt, domain: r.domain, publishedAt: r.published_at, collectedAt: r.collected_at, contentFingerprint: r.content_fingerprint,
     topicId: r.topic_id, category: r.category, neighborhood: r.neighborhood, localRelevance: r.local_relevance,
-    enrichmentStatus: r.enrichment_status, timeKind: r.time_kind, ingestionRunId: r.ingestion_run_id, isFixture: r.is_fixture === 1 });
+    enrichmentStatus: r.enrichment_status, enrichmentProvider: r.enrichment_provider ?? null, timeKind: r.time_kind, ingestionRunId: r.ingestion_run_id, isFixture: r.is_fixture === 1 });
 }
 export function topicFromRow(r: Row): TopicRecord {
   return topicRecordSchema.parse({ id: r.id, slug: r.slug, canonicalLabel: r.canonical_label, category: r.category, neighborhood: r.neighborhood,
@@ -41,7 +41,7 @@ export function toObservations(items: ItemRecord[], topics: TopicRecord[]): Obse
     return topicSlug && i.enrichmentStatus === "completed" && i.localRelevance >= 0.5 ? [{ ...toSignal(i), topicSlug, neighborhood: i.neighborhood }] : [];
   });
 }
-export function fromSignal(signal: Signal, fields: Partial<Pick<ItemRecord, "topicId" | "category" | "neighborhood" | "localRelevance" | "enrichmentStatus" | "ingestionRunId" | "isFixture">> = {}): ItemRecord {
+export function fromSignal(signal: Signal, fields: Partial<Pick<ItemRecord, "topicId" | "category" | "neighborhood" | "localRelevance" | "enrichmentStatus" | "enrichmentProvider" | "ingestionRunId" | "isFixture">> = {}): ItemRecord {
   return itemRecordSchema.parse({ id: signal.id, source: signal.source, sourceId: signal.sourceId, canonicalUrl: signal.canonicalUrl, originalUrl: signal.url,
     title: signal.title, excerpt: signal.text, domain: new URL(signal.canonicalUrl).hostname, publishedAt: signal.publishedAt, collectedAt: signal.collectedAt,
     contentFingerprint: signal.contentHash, timeKind: signal.timeKind, topicId: null, category: null, neighborhood: null,
@@ -49,10 +49,10 @@ export function fromSignal(signal: Signal, fields: Partial<Pick<ItemRecord, "top
 }
 export function itemInsert(i: ItemRecord): InStatement {
   const v = itemRecordSchema.parse(i);
-  return { sql: `INSERT INTO items(id,source,source_id,canonical_url,original_url,title,excerpt,domain,published_at,collected_at,content_fingerprint,topic_id,category,neighborhood,local_relevance,enrichment_status,time_kind,ingestion_run_id,is_fixture)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING RETURNING *`,
+  return { sql: `INSERT INTO items(id,source,source_id,canonical_url,original_url,title,excerpt,domain,published_at,collected_at,content_fingerprint,topic_id,category,neighborhood,local_relevance,enrichment_status,time_kind,ingestion_run_id,is_fixture${v.enrichmentProvider === null ? "" : ",enrichment_provider"})
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?${v.enrichmentProvider === null ? "" : ",?"}) ON CONFLICT DO NOTHING RETURNING *`,
     args: [v.id, v.source, v.sourceId, v.canonicalUrl, v.originalUrl, v.title, v.excerpt, v.domain, v.publishedAt, v.collectedAt, v.contentFingerprint,
-      v.topicId, v.category, v.neighborhood, v.localRelevance, v.enrichmentStatus, v.timeKind, v.ingestionRunId, Number(v.isFixture)] };
+      v.topicId, v.category, v.neighborhood, v.localRelevance, v.enrichmentStatus, v.timeKind, v.ingestionRunId, Number(v.isFixture), ...(v.enrichmentProvider === null ? [] : [v.enrichmentProvider])] };
 }
 export function topicInsert(t: TopicRecord, options: { legacy?: boolean } = {}): InStatement {
   const v = topicRecordSchema.parse(t);

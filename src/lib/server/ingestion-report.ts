@@ -34,7 +34,7 @@ export function requireRemoteDatabase(env: Record<string, string | undefined>) {
 /** Allowlist fields rather than forwarding source errors, database records or environment values. */
 export function ingestionReport(result: IngestionResult, fixtureMode = false, now = new Date()): IngestionReport {
   const pulse = result.pulse;
-  const degraded = pulse?.status === "degraded" || pulse?.status === "unavailable" || !!pulse?.enrichment?.pending
+  const degraded = pulse?.status === "degraded" || pulse?.status === "unavailable" || !!pulse?.enrichment?.pending || !!pulse?.enrichment?.run?.fallbackCount
     || result.runs.some((r) => r.status !== "completed");
   return ingestionReportSchema.parse({ event: "cli.ingest", at: now.toISOString(),
     status: result.skipped ? "skipped" : degraded ? "degraded" : "completed", mode: pulse?.mode ?? (fixtureMode ? "demo" : "live"),
@@ -61,7 +61,13 @@ export function formatIngestionSummary(input: IngestionReport): string {
   if (r.sources.length) lines.push("| Source | Status | Discovered | Inserted | Duplicates | Errors |", "| --- | --- | ---: | ---: | ---: | ---: |",
     ...r.sources.map((s) => `| ${s.source} | ${s.status} | ${s.discovered} | ${s.inserted} | ${s.duplicates} | ${s.errors} |`), "");
   if (r.enrichment) lines.push(`**Enrichment:** ${r.enrichment.provider} · ${r.enrichment.completed} completed · ${r.enrichment.pending} pending · ${r.enrichment.irrelevant} irrelevant (latest 24h).`,
-    r.enrichment.provider === "mock" ? "Mock matching is local and free. No OpenAI request was made." : "Unenriched collected signals remain stored and do not contribute to trend scores.", "");
+    r.enrichment.provider === "heuristic" ? "Heuristic matching is local and free. This does not imply the selected API provider succeeded." : "Unenriched collected signals remain stored and do not contribute to trend scores.", "");
+  if (r.enrichment?.run) {
+    const e = r.enrichment.run;
+    lines.push(`**This run:** selected ${e.selectedProvider}; actually processed by ${e.actualProviders.join(", ") || "none"}.`,
+      `**Processed:** ${e.aiEnriched} API-enriched · ${e.heuristicEnriched} heuristic-enriched · ${e.unprocessed} unprocessed.`,
+      `**Provider errors:** ${e.providerErrors} · **Fallback signals:** ${e.fallbackCount}.`, "");
+  }
   if (r.pruned) lines.push(`**Retention pruned:** ${r.pruned.items} items, ${r.pruned.snapshots} topic snapshots, ${r.pruned.pulseSnapshots} dashboard snapshots, ${r.pruned.ingestionRuns} source runs, ${r.pruned.topics} unreferenced topics.`, "");
   if (r.status === "degraded") lines.push("Collection/publication completed with reduced coverage or pending enrichment. Inspect source counts; collected evidence is retained.", "");
   if (r.failureCode) lines.push(`**Failure:** ${r.failureCode}. Check required remote database configuration and connectivity. Previously committed evidence is retained.`, "");

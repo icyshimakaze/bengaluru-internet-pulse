@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { categorySchema, neighborhoodSchema, sourceSchema, httpUrlSchema, slugSchema, trendLifecycleSchema } from "@/lib/domain/schema";
+import { storedEnrichmentProviderSchema } from "@/lib/domain/enrichment-providers";
 
 const timestamp = z.iso.datetime().transform((value) => new Date(value).toISOString());
 const id = z.string().min(1).max(200);
@@ -23,6 +24,7 @@ export const itemFieldsSchema = z.object({
   topicId: id.nullable(), category: categorySchema.nullable(), neighborhood: neighborhoodSchema.nullable(),
   localRelevance: factor, enrichmentStatus: enrichmentStatusSchema, timeKind: z.enum(["published", "discovered"]),
   ingestionRunId: id.nullable(), isFixture: z.boolean(),
+  enrichmentProvider: storedEnrichmentProviderSchema.nullable().default(null),
 });
 export const itemRecordSchema = itemFieldsSchema.refine((v) => v.collectedAt >= v.publishedAt, "Collection cannot precede publication")
   .refine((v) => v.enrichmentStatus !== "completed" || (v.topicId !== null && v.category !== null), "Completed items need a topic and category")

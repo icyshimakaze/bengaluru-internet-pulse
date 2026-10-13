@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { enrichmentRunSchema } from "./enrichment-providers";
 
 export const sources = ["gdelt", "bluesky", "hackernews"] as const;
 export const sourceSchema = z.enum(sources);
@@ -88,8 +89,8 @@ export const pulseSchema = z.object({
   stale: z.boolean(), status: z.enum(["demo", "healthy", "degraded", "unavailable"]),
   trends: z.array(trendSchema), hotspots: z.array(hotspotSchema), sources: z.array(sourceStatusSchema),
   totalSignals: z.number().int().nonnegative(), notice: z.string().nullable(),
-  enrichment: z.object({ provider: z.enum(["mock", "openai", "off"]), pending: z.number().int().nonnegative(),
-    completed: z.number().int().nonnegative(), irrelevant: z.number().int().nonnegative() }).optional(),
+  enrichment: z.object({ provider: z.enum(["openai", "xkiro", "heuristic", "mixed", "none", "mock", "off"]), pending: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(), irrelevant: z.number().int().nonnegative(), run: enrichmentRunSchema.optional() }).optional(),
 });
 export type Pulse = z.infer<typeof pulseSchema>;
 export const legacyPulseSchema = pulseSchema.extend({ version: z.literal("v1"), trends: z.array(legacyTrendSchema) });

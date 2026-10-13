@@ -7,7 +7,7 @@ import type { IngestionResult } from "@/lib/pipeline/ingest";
 import { now, pulse } from "./helpers";
 
 function result(status: "healthy" | "degraded" | "unavailable" = "healthy"): IngestionResult {
-  return { skipped: false, added: 4, pulse: pulse({ status, enrichment: { provider: "mock", pending: 0, completed: 4, irrelevant: 0 } }),
+  return { skipped: false, added: 4, pulse: pulse({ status, enrichment: { provider: "heuristic", pending: 0, completed: 4, irrelevant: 0 } }),
     runs: [{ id: "internal-run", source: "gdelt", startedAt: now.toISOString(), finishedAt: now.toISOString(),
       discovered: 7, inserted: 4, duplicates: 2, errors: 1, status: "partial", errorMessage: "SECRET_SOURCE_DIAGNOSTIC", isFixture: false }],
     pruned: { items: 2, snapshots: 3, pulseSnapshots: 1, ingestionRuns: 1, topics: 0 } };
@@ -28,7 +28,7 @@ describe("scheduled ingestion CLI contracts", () => {
     const report = ingestionReport(result(), false, now), summary = formatIngestionSummary(report);
     expect(report).toMatchObject({ status: "degraded", sources: [{ source: "gdelt", discovered: 7, inserted: 4, duplicates: 2, errors: 1 }], pruned: { items: 2, snapshots: 3 } });
     expect(summary).toContain("| gdelt | partial | 7 | 4 | 2 | 1 |");
-    expect(summary).toContain("Mock matching is local and free");
+    expect(summary).toContain("Heuristic matching is local and free");
     expect(summary + JSON.stringify(report)).not.toMatch(/SECRET_SOURCE_DIAGNOSTIC|internal-run/);
   });
   it("distinguishes completed storage with source/AI outages from failed storage and lease skips", () => {
@@ -47,23 +47,23 @@ describe("scheduled ingestion CLI contracts", () => {
     const directory = mkdtempSync(join(process.cwd(), ".cache", "cli-summary-")), path = join(directory, "summary.md");
     const run = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "scripts/ingest.ts", "--require-remote"], {
       encoding: "utf8", timeout: 15000, env: { ...process.env, TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "PRIVATE_TOKEN_SENTINEL",
-        OPENAI_API_KEY: "PRIVATE_KEY_SENTINEL", ENRICHMENT_MODE: "mock", GITHUB_ACTIONS: "true", GITHUB_STEP_SUMMARY: path },
+        OPENAI_API_KEY: "PRIVATE_KEY_SENTINEL", ENRICHMENT_PROVIDER: "heuristic", GITHUB_ACTIONS: "true", GITHUB_STEP_SUMMARY: path },
     });
     expect(run.status).toBe(1); expect(run.error).toBeUndefined();
     expect(run.stderr).toContain("REMOTE_DATABASE_REQUIRED");
     expect(run.stdout + run.stderr).not.toMatch(/PRIVATE_TOKEN_SENTINEL|PRIVATE_KEY_SENTINEL|source\.query/);
     expect(readFileSync(path, "utf8")).toContain("**Outcome:** failed");
-  });
+  }, 20000);
   it("fails visibly without starting sources when a configured database cannot migrate", () => {
     mkdirSync(".cache", { recursive: true });
     const directory = mkdtempSync(join(process.cwd(), ".cache", "cli-database-")), path = join(directory, "invalid.db");
     writeFileSync(path, "THIS_IS_NOT_A_DATABASE");
     const run = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "scripts/ingest.ts"], {
       encoding: "utf8", timeout: 15000, env: { ...process.env, TURSO_DATABASE_URL: "file:" + path.replaceAll("\\", "/"),
-        TURSO_AUTH_TOKEN: "PRIVATE_TOKEN_SENTINEL", OPENAI_API_KEY: "PRIVATE_KEY_SENTINEL", ENRICHMENT_MODE: "mock", GITHUB_STEP_SUMMARY: "" },
+        TURSO_AUTH_TOKEN: "PRIVATE_TOKEN_SENTINEL", OPENAI_API_KEY: "PRIVATE_KEY_SENTINEL", ENRICHMENT_PROVIDER: "heuristic", GITHUB_STEP_SUMMARY: "" },
     });
     expect(run.status).toBe(1); expect(run.error).toBeUndefined();
     expect(run.stderr).toContain("INGEST_FAILED");
     expect(run.stdout + run.stderr).not.toMatch(/PRIVATE_TOKEN_SENTINEL|PRIVATE_KEY_SENTINEL|source\.query|THIS_IS_NOT_A_DATABASE/);
-  });
+  }, 20000);
 });

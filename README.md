@@ -19,7 +19,7 @@ Open `http://localhost:3000`. The default **demo mode** uses explicitly fictiona
 
 ## Local live collection
 
-Copy `.env.example` to `.env.local`, set `APP_DATA_MODE=live` and keep `TURSO_DATABASE_URL=file:.data/pulse.db`. No source API keys are needed. Run:
+Copy `.env.example` to `.env.local`, set `APP_DATA_MODE=live`, keep `ENRICHMENT_PROVIDER=heuristic` and `TURSO_DATABASE_URL=file:.data/pulse.db`. No source or enrichment API keys are needed. Run:
 
 ```sh
 npm run db:migrate
@@ -29,7 +29,7 @@ npm run dev
 
 The ingestion command automatically migrates the schema too. Poll regularly to build a baseline; first-run rankings have limited history. Public sources can fail or return no matches. Live mode always reports these conditions and never substitutes demo evidence.
 
-`npm run ingest` also works without an environment file, defaulting to local `.data/pulse.db` and **free mock enrichment**. For an offline end-to-end collection check, run `npm run ingest -- --fixtures`; it uses the same three adapters and enrichment/persistence pipeline with fictional payloads in separate `.data/ingestion-fixtures.db`. It forces the local mock provider, makes no source or OpenAI network requests, and cannot seed the configured remote database.
+`npm run ingest` also works without an environment file, defaulting to local `.data/pulse.db` and **free heuristic enrichment**. For an offline end-to-end collection check, run `npm run ingest -- --fixtures`; it uses the same three adapters and enrichment/persistence pipeline with fictional payloads in separate `.data/ingestion-fixtures.db`. It forces the genuine local heuristic, makes no source or model API requests, and cannot seed the configured remote database.
 
 ## Checks
 
@@ -54,17 +54,25 @@ Numbered migrations and validated repository operations live in `src/lib/db`. `n
 
 Import this repository into Vercel as a Next.js project. A demo deployment needs no secrets. A persistent live deployment needs a **libSQL-compatible Turso database**, `APP_DATA_MODE=live`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Vercel's encrypted environment settings. Never use a local file database on Vercel. `CRON_SECRET` is needed only if an operator uses the optional authenticated HTTP ingestion endpoint.
 
-Production ingestion runs through [GitHub Actions](.github/workflows/ingest.yml) at `17,47 * * * *` UTC and supports **Actions → Ingest public signals → Run workflow**. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as GitHub repository Actions secrets. Until both exist, scheduled runs clearly report **not configured** and skip ingestion before dependency installation; they never count as fresh collection. Normal manual runs with missing secrets and all actual database errors still fail visibly. Use the optional **check_configuration** dispatch to inspect setup without collection. `OPENAI_API_KEY` is optional: mock enrichment is the free default even when a key exists; selecting `openai` explicitly enables API usage. Workflow concurrency and the database lease prevent overlap. Structured source counts, enrichment backlog and retention results appear in logs and the run summary. There is no Vercel cron configuration or scheduling dependency. See [Scheduled ingestion](docs/scheduled-ingestion.md) for setup, failure semantics, dispatch options and local reproduction.
+Production ingestion runs through [GitHub Actions](.github/workflows/ingest.yml) at `17,47 * * * *` UTC and supports **Actions → Ingest public signals → Run workflow**. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as GitHub repository Actions secrets. Until both exist, scheduled runs clearly report **not configured** and skip ingestion before dependency installation; they never count as fresh collection. Normal manual runs with missing secrets and all actual database errors still fail visibly. Use the optional **check_configuration** dispatch to inspect database-secret presence without collection. The intended production provider is **xKiro**, selected through `ENRICHMENT_PROVIDER=xkiro`, with `XKIRO_API_KEY` as a Secret and `XKIRO_MODEL` as a vendor-prefixed model Variable. OpenAI is retained as an optional provider. Workflow concurrency and the database lease prevent overlap. Structured source counts, selected/actual enrichment providers, fallback counts, backlog and retention appear in logs and the run summary. There is no Vercel cron configuration or scheduling dependency. See [Scheduled ingestion](docs/scheduled-ingestion.md).
 
 `GET /api/ingest` remains available to authenticated operators with `Authorization: Bearer <CRON_SECRET>` (at least 32 characters). The GitHub workflow calls the CLI directly and does not need this secret or a deployed site URL. Public reads never trigger source calls or writes. The secret must not be placed in a URL or a `NEXT_PUBLIC_` variable.
 
 ## Semantic enrichment
 
-The default `ENRICHMENT_MODE=mock` uses local deterministic mock responses, needs no key, and incurs no API bills. Collected evidence stays real in live mode; the snapshot explicitly identifies mock topic matching. `off` stores pending signals without classifying them. The legacy `AI_ENABLED` flag cannot enable paid calls.
+Three server-only providers implement a common `EnrichmentProvider` interface and normalized Zod result contract. `getEnrichmentProvider()` reads `ENRICHMENT_PROVIDER` and rejects unknown values. Switching providers requires environment changes only:
 
-The production path uses server-only OpenAI Responses with **`gpt-6-luna`**, strict structured output, `store: false` and no tools. It requires an explicit `ENRICHMENT_MODE=openai` configuration. No real OpenAI call is made during development checks. Source titles/excerpts and catalog labels are untrusted JSON input and never become instructions.
+| Provider | Environment | Behavior |
+| --- | --- | --- |
+| `heuristic` | `ENRICHMENT_PROVIDER=heuristic` | Local default; genuine text/keyword/entity normalization, conservative topic similarity and factual summaries; no key or API bill |
+| `xkiro` | `ENRICHMENT_PROVIDER=xkiro`, `XKIRO_API_KEY`, `XKIRO_MODEL` | Intended production selection; OpenAI-compatible Chat Completions; model must retain its `vendor/model` prefix |
+| `openai` | `ENRICHMENT_PROVIDER=openai`, `OPENAI_API_KEY` | Optional official Responses API; `OPENAI_MODEL` defaults to `gpt-6-luna` and is configurable |
 
-The repository saves new signals before enrichment, supplies topic IDs seen within 24 hours, batches at most 10 items, and processes at most 30 per run. Validated settings can lower these limits. Completed items are never processed again. A total 15-second deadline, at most two transient-error attempts per request, a 15-minute per-item cooldown and three-run attempt cap bound cost and outages. Failure keeps the signal pending for a later run. Classification confidence is stored separately; only the deterministic engine computes trend scores and confidence. See [Semantic enrichment](docs/enrichment.md) for result schemas, category mapping, security, provenance and fallback behavior.
+`XKIRO_BASE_URL` defaults to `https://api.xkiro.com/v1`. Select an entitled xKiro model through configuration; none is hard-coded. `OPENAI_API_KEY` is optional at startup and required only for OpenAI processing. A missing selected-provider key/model, 401/403/429, upstream failure, timeout or malformed output falls back **only to heuristic**, never to the other API provider. Actual processing provenance is persisted per item and per run; selecting xKiro does not claim xKiro succeeded when local fallback handled a batch.
+
+The repository commits collected signals before enrichment, supplies active topic IDs seen within 24 hours, batches up to `AI_BATCH_SIZE=10` and processes up to `MAX_AI_ITEMS_PER_RUN=30`. Limits are validated. Completed/irrelevant items are never re-enriched. A 15-second API-stage deadline, eight-second requests, bounded transient retries, queue cooldown and attempt caps prevent runaway work. `ENRICHMENT_ENABLED=false` stores pending items without classification. If heuristic validation also fails, data stays pending rather than being lost or scored.
+
+Source titles/excerpts are untrusted JSON data, separated from static instructions; no tools or code execution are available. Classification confidence remains separate from deterministic trend confidence. Migration 6 preserves historical mock/OpenAI provenance and adds actual-provider metadata and durable enrichment-run statistics. All model tests use mocks and consume no API credits. See [Semantic enrichment](docs/enrichment.md) for the architecture, environment variables, GitHub Secrets/Variables, fallback and observability contracts.
 
 ## API
 

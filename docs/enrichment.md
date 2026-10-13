@@ -1,25 +1,72 @@
-# Semantic enrichment
+# Semantic enrichment: OpenAI, xKiro and heuristic
 
-The default provider is `mock`: deterministic local responses exercise the same validated enrichment contract without an API key, network request, or charge. This is a development substitute, not live AI. Only explicit `ENRICHMENT_MODE=openai` enables the server-only OpenAI Responses API with `gpt-6-luna`. `off` collects signals without enrichment.
+All three server-only adapters implement `EnrichmentProvider.enrich(signals, activeTopics, context)` and return the same `EnrichmentResult[]`. `getEnrichmentProvider()` selects a provider using `ENRICHMENT_PROVIDER`; unknown names cause a clear configuration error. OpenAI support is retained. Switching APIs requires environment changes only.
 
-## Data flow
+| Provider | Implementation | Credentials and model |
+| --- | --- | --- |
+| `openai` | Official OpenAI SDK, Responses API, strict structured output, `store: false` | `OPENAI_API_KEY`; `OPENAI_MODEL` defaults to `gpt-6-luna` |
+| `xkiro` | Official OpenAI SDK, compatible Chat Completions, JSON-object mode plus strict local validation | `XKIRO_API_KEY`, `XKIRO_MODEL`; `XKIRO_BASE_URL` defaults to `https://api.xkiro.com/v1` |
+| `heuristic` | Local deterministic normalization and conservative topic matching | No key, account, network request or bill |
 
-Sources are validated and deduplicated, then new items are durably stored as pending before any model call. A leased queue selects at most 30 pending items from the previous 24 hours. Successfully completed and irrelevant items are never selected again. Failures remain pending, with a 15-minute retry cooldown and at most three enrichment runs per item. Items still retain the normal 14-day retention period.
+Local development defaults to `ENRICHMENT_PROVIDER=heuristic`. The intended deployment selects `ENRICHMENT_PROVIDER=xkiro`; the scheduled workflow defaults to this selection. xKiro models **must include the vendor prefix** (`openai/...`, `z-ai/...`, `google/...`), preserved exactly in requests and provenance. No xKiro model is hard-coded: select a model your account can access. API selection does not imply free or entitled model access; this implementation does not make a claim about provider pricing.
 
-Before enrichment the repository fetches up to 50 canonical topics seen within 24 hours, including topics below the ranking threshold. Batches contain at most 10 items. Accepted proposals are added to the catalog for subsequent batches. Topic identity, item assignments, validated enrichment provenance, deterministic topic metrics and snapshots commit together. Failed publication preserves the previously collected pending items and the previous complete snapshot.
+## Configuration
 
-## Trust boundary
+```dotenv
+# Intended production selection; local .env.example instead defaults to heuristic.
+ENRICHMENT_PROVIDER=xkiro
+XKIRO_API_KEY=your-private-key
+XKIRO_BASE_URL=https://api.xkiro.com/v1
+XKIRO_MODEL=vendor/model-from-your-account
+AI_BATCH_SIZE=10
+MAX_AI_ITEMS_PER_RUN=30
+```
 
-Instructions are a static server-owned string. Titles, excerpts and the catalog are serialized into a separate user input as untrusted JSON data. No tools, code execution, source fetching, browser actions or model-directed SQL are available. No secrets, profiles, engagement statistics, or trend scores enter the prompt. Output is strict structured data and is validated again locally before persistence. IDs must match the batch and supplied catalog; exactly one existing ID or new topic proposal is required. Unknown keys, duplicate IDs, missing results, invalid enums, unsupported neighborhoods and summaries over 25 words are rejected. Summaries use supplied topic labels or short extractive source text, rather than invented event explanations.
+Use `ENRICHMENT_PROVIDER=openai` with `OPENAI_API_KEY` and optionally `OPENAI_MODEL` to switch to OpenAI. Use `ENRICHMENT_PROVIDER=heuristic` for keyless operation. Keys are optional at application startup and required only when constructing their selected provider. A selected provider with a missing key/model logs a sanitized configuration error and falls back to heuristic. `ENRICHMENT_ENABLED=false` deliberately leaves signals pending without consuming enrichment attempts.
 
-Categories are `civic`, `traffic`, `technology`, `business`, `culture`, `food`, `events`, `weather`, `sports`, `other`. These are retained in enrichment records; a deterministic mapping preserves the dashboard's five editorial category groups. Neighborhoods use the existing curated ten-area enum plus `Citywide` and `Unknown`; neither sentinel becomes a map hotspot. A named area must occur explicitly in the supplied title or excerpt.
+The new variables replace `ENRICHMENT_MODE`, `ENRICHMENT_BATCH_SIZE`, `ENRICHMENT_MAX_ITEMS` and `PULSE_ENRICHMENT_MODE`. Old mode/enable flags never implicitly activate a paid provider. Update deployment variables rather than relying on those retired names. All configuration is server-only; never set `NEXT_PUBLIC_OPENAI_API_KEY` or `NEXT_PUBLIC_XKIRO_API_KEY`.
 
-`confidence` is classification confidence only. It is persisted separately and never enters the score formula or replaces deterministic trend confidence. Relevant assignments require classification confidence of at least 0.6; existing-topic matches require at least 0.75. Low-confidence or unavailable results stay pending and do not contribute to scoring.
+## Durable data flow
 
-## Cost and availability
+Collection validates and deduplicates signals and commits pending items **before** enrichment. The leased queue claims at most `MAX_AI_ITEMS_PER_RUN` (default/maximum 30) from the previous 24 hours. Completed and irrelevant items are never re-enriched. Unprocessed items have a 15-minute retry cooldown and three-run attempt cap, and remain retained for 14 days.
 
-Validated environment limits can lower the batch size (default 10, maximum 10) and per-run count (default 30, maximum 30). Prompt excerpts are bounded to 1,000 characters, titles to 300 characters, catalogs to 50 topics, and output to 4,000 tokens per request. The entire enrichment stage has a 15-second deadline; each request gets at most two attempts for temporary network/408/409/429/5xx failures. SDK retries are disabled to prevent multiplying this budget. Permanent errors, refusals, incomplete responses and malformed outputs do not trigger paid format-repair calls. Responses use `store: false` and no tools. Logs contain only provider, counts and fixed error codes.
+Fetch up to 50 active canonical topics seen in the previous 24 hours before any API call. Process batches of `AI_BATCH_SIZE` (default/maximum 10); accepted topics join the catalog for subsequent batches. Whole-batch validation checks all IDs and proposals before accepting any API result. Topic assignments, provider/model provenance, run statistics, deterministic topic scores and snapshots commit in one short publication transaction. No API request occurs within that transaction. Failed publication preserves committed pending collection and the prior complete snapshot.
 
-Missing credentials in explicit OpenAI mode degrade safely to pending storage. No account actions are required for mock mode. The legacy `AI_ENABLED` variable does not enable paid requests.
+## Heuristic behavior and limitations
 
-See [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses) and [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna).
+The heuristic is genuine normalization, not a mock response generator. It normalizes Unicode/case/spacing, removes stop words, extracts meaningful tokens and explicit Bengaluru entities, classifies the ten allowed categories, detects supported neighborhood mentions, and constructs short extractive summaries. A curated synonym map normalizes variations such as `delayed`/`delays`, `BMRCL`/`metro` and `flooding`/`flood`.
+
+Existing-topic matching requires token Jaccard similarity of at least 0.75, compatible category, matching numeric/event anchors and no conflicting named neighborhoods. Ambiguous ties propose a new topic. Equivalent proposals within a batch share one identity. Unrelated metro extensions, closures and delays are not collapsed into a fixed metro theme. One named neighborhood is retained only when explicit; several mentions yield Unknown, and Citywide/Unknown never become hotspots. Heuristics can still split paraphrases or miss context and cannot guarantee event equivalence. Low-confidence or unclassifiable signals remain pending.
+
+## Trust and validation
+
+Static instructions stay separate from user JSON containing untrusted titles, excerpts and catalog labels. Source content never becomes a system/developer message, executable code, SQL or a tool request. Neither provider has tools, source-fetching permissions, browser actions or database access. Keys, profiles, engagement data and trend scores are absent from prompts.
+
+Every provider output passes the same strict Zod schema and contextual validator. Reject unknown keys, scoring fields, unexpected/duplicate/missing signal IDs, unknown topic IDs, inconsistent canonical identity, unsupported category/location, invalid confidence/relevance and summaries longer than 25 words or unsupported by supplied metadata. Invalid API output is rejected as a whole batch; heuristic results are validated independently before persistence. The publication boundary revalidates injected results too.
+
+Categories: civic, traffic, technology, business, culture, food, events, weather, sports, other. Neighborhoods: the curated ten Bengaluru areas, Citywide and Unknown. Classification confidence stays separate from deterministic trend confidence: accepted new topics require 0.6 and existing matches 0.75. Providers never choose Pulse Score, final ranking, lifecycle or trend confidence.
+
+## Fallback and bounded work
+
+```text
+OpenAI error → heuristic
+xKiro error  → heuristic
+```
+
+There is **no automatic OpenAI-to-xKiro or xKiro-to-OpenAI fallback**, even when both keys exist. Missing keys/models, 401, 403, exhausted 429 allowance, 5xx, connection errors, timeouts, refusals, truncated output, malformed JSON and invalid results all use local fallback for the failed batch. Retry transient 408/409/429/5xx or connection failures at most once. Permanent failures and malformed outputs are not retried; no paid formatting-repair call is made. After authentication/access/rate exhaustion or a deadline, remaining batches use heuristic without additional API requests.
+
+SDK retries are disabled. Individual API requests have eight-second deadlines, and the entire API stage has a 15-second deadline. Local fallback continues after that deadline. Titles are bounded to 300 characters, excerpts to 1,000, catalogs to 50 and output to 4,000 tokens. If local validation also fails, the collected items remain pending; they are never deleted or admitted into scoring.
+
+## Provenance and observation
+
+`items.enrichment_provider` and `item_enrichments.provider/model` identify the provider that actually processed each item. `enrichment_runs`, linked to the atomic dashboard snapshot, records selected provider, actual providers, attempted/AI/heuristic/unprocessed item counts, provider errors and fallback count. Errors count failed provider attempts, including one configuration error; fallback count is the number of signals routed to heuristic because their selected API was unavailable. Completed/irrelevant counts in snapshots describe the latest 24 hours; run counts describe only this invocation.
+
+Dashboard/API notices and CLI summaries report actual providers (`mixed` when a run uses more than one; `none` when no items were processed). Selecting xKiro does not imply xKiro success, and selecting OpenAI does not imply the site used OpenAI. Fallback marks the run degraded and names heuristic processing. Migration 6 preserves old mock/OpenAI metadata and immutable migration checksums; historical mock records are never relabeled as heuristic. Run retention cascades with the 30-day snapshot retention.
+
+## GitHub configuration and verification
+
+Required database Secrets: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`. For xKiro add Secret `XKIRO_API_KEY` and Variables `ENRICHMENT_PROVIDER=xkiro`, `XKIRO_MODEL=vendor/model`. Optional Variables: `XKIRO_BASE_URL`, `AI_BATCH_SIZE`, `MAX_AI_ITEMS_PER_RUN`, `ENRICHMENT_ENABLED`. OpenAI instead needs Secret `OPENAI_API_KEY`, Variable `ENRICHMENT_PROVIDER=openai` and optionally `OPENAI_MODEL`. Heuristic needs no provider Secrets. API keys are scoped only to the ingestion step.
+
+Tests mock both SDK protocols and consume no API credits. They cover factory choices, key/model errors, all required failure modes, fallback isolation, atomic schemas, prompt injection, heuristic entity/topic distinctions, batching, provenance, migration preservation, retention and idempotence. `npm run ingest -- --fixtures` forces heuristic processing and an isolated fixture database regardless of API configuration.
+
+References: [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses), [xKiro API overview](https://docs.xkiro.com/api/overview/), [xKiro Chat Completions](https://docs.xkiro.com/api/chat-completions/).

@@ -8,11 +8,11 @@ import { type SourceAdapter } from "@/lib/sources/adapters";
 import { now, observation, pulse } from "./helpers";
 import { classifyAI } from "@/lib/pipeline/ai";
 import { fromSignal } from "@/lib/db/mapping";
-const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { mode: "mock" });
+const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { provider: "heuristic" });
 function adapters(failed?: Source): Record<Source, SourceAdapter> {
   const adapter = (source: Source): SourceAdapter => async () => {
     if (source === failed) throw new Error("upstream outage");
-    return { signals: [0, 1].map((i) => ({ ...observation(`${source}-${i}`, 0.5 + i * 0.5, source), text: `Bengaluru metro ${source} discussion ${i}`, title: `Bengaluru metro ${source} discussion ${i}` })),
+    return { signals: [0, 1].map((i) => ({ ...observation(`${source}-${i}`, 0.5 + i * 0.5, source), text: `Bengaluru metro ${source} discussion ${i}`, title: i ? "Bangalore metro service delayed" : "Bengaluru metro service delays" })),
       health: { source, status: "ok" as const, fetched: 2, accepted: 2, rejected: 0, durationMs: 10, checkedAt: now.toISOString() } };
   };
   return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews") };
@@ -136,10 +136,11 @@ describe("transactional pipeline", () => {
     const repo = repository();
     const result = await ingest({ repository: repo, now, adapters: adapters("gdelt"), timeoutMs: 1000, enrich: async () => { throw new Error("model unavailable"); } });
     expect(result.pulse?.status).toBe("degraded"); expect(result.added).toBe(4);
-    expect(result.pulse?.trends).toEqual([]);
+    expect(result.pulse?.trends[0]?.current2h).toBe(4);
     const retained = await repo.load(now);
     expect(retained.items).toHaveLength(4);
-    expect(retained.items.every((i) => i.enrichmentStatus === "pending" && i.topicId === null)).toBe(true);
+    expect(retained.items.every((i) => i.enrichmentStatus === "completed" && i.enrichmentProvider === "heuristic")).toBe(true);
+    expect(result.pulse?.enrichment?.run).toMatchObject({ actualProviders: ["heuristic"], heuristicEnriched: 4, providerErrors: 1, fallbackCount: 4 });
     expect((await repo.ingestionStatus({ source: "gdelt" }))[0]).toMatchObject({ status: "failed", errors: 1, inserted: 0, errorMessage: "SOURCE_UNAVAILABLE" });
   });
   it("excludes overlapping ingestion and protects the lease owner", async () => {

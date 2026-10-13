@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { neighborhoods, slugSchema, type Signal, type Topic } from "./schema";
+import type { EnrichmentProviderName } from "./enrichment-providers";
+export { enrichmentProviderSchema } from "./enrichment-providers";
 
 export const semanticCategories = ["civic", "traffic", "technology", "business", "culture", "food", "events", "weather", "sports", "other"] as const;
 export const semanticCategorySchema = z.enum(semanticCategories);
@@ -20,10 +22,8 @@ export const enrichmentResultSchema = z.object({
 }).strict();
 export const enrichmentBatchSchema = z.object({ items: z.array(enrichmentResultSchema).max(10) }).strict();
 export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
-export const enrichmentProviderSchema = z.enum(["mock", "openai"]);
-export type EnrichmentProvider = z.infer<typeof enrichmentProviderSchema>;
 export const PRODUCTION_MODEL = "gpt-6-luna" as const;
-export type EnrichmentAssignment = { result: EnrichmentResult; topic: EnrichmentTopic | null; provider: EnrichmentProvider; model: typeof PRODUCTION_MODEL | null };
+export type EnrichmentAssignment = { result: EnrichmentResult; topic: EnrichmentTopic | null; provider: EnrichmentProviderName; model: string | null };
 export const editorialCategory: Record<EnrichmentResult["category"], Topic["category"]> = {
   civic: "Civic", traffic: "Mobility", technology: "Technology", business: "Technology",
   culture: "City life", food: "City life", events: "City life", weather: "Weather", sports: "City life", other: "City life",

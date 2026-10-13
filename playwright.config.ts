@@ -1,11 +1,15 @@
 import { defineConfig } from "@playwright/test";
+import { DEMO_BASE_URL, LIVE_BASE_URL } from "./tests/e2e/urls";
+
+const safeEnv = { ENRICHMENT_PROVIDER: "heuristic", OPENAI_API_KEY: "", XKIRO_API_KEY: "",
+  TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", CRON_SECRET: "" };
 
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
-  use: { baseURL: "http://127.0.0.1:3000", trace: "retain-on-failure" },
+  use: { baseURL: DEMO_BASE_URL, trace: "retain-on-failure" },
   webServer: [
-    { command: "npm run start", url: "http://127.0.0.1:3000", reuseExistingServer: !process.env.CI, env: { APP_DATA_MODE: "demo", AI_ENABLED: "false", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", CRON_SECRET: "" } },
-    { command: "npm run start -- --port 3001", url: "http://127.0.0.1:3001", reuseExistingServer: !process.env.CI, env: { APP_DATA_MODE: "live", AI_ENABLED: "false", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", CRON_SECRET: "" } },
+    { command: "npm run start -- --hostname 127.0.0.1 --port 4317", url: DEMO_BASE_URL, reuseExistingServer: false, env: { ...safeEnv, APP_DATA_MODE: "demo" } },
+    { command: "npm run start -- --hostname 127.0.0.1 --port 4318", url: LIVE_BASE_URL, reuseExistingServer: false, env: { ...safeEnv, APP_DATA_MODE: "live" } },
   ],
 });

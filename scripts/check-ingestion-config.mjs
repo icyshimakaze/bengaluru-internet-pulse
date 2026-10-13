@@ -26,7 +26,7 @@ const summary = ["# Bengaluru Pulse ingestion configuration", "",
   ...(!configured ? ["Missing repository Actions secrets:", "", ...missing.map((name) => `- \`${name}\``), "",
     "Add them under **Settings → Secrets and variables → Actions**. Scheduled ingestion starts automatically when both exist."] : []),
   ...(checkOnly ? ["", "Configuration-only dispatch: secret presence was checked; credentials and database connectivity were not tested."] : []),
-  "", "Mock enrichment remains the free default. OpenAI credentials are optional.", ""].join("\n");
+  "", "OpenAI and xKiro credentials are provider-specific and optional for this database setup check. API enrichment failures use local heuristic fallback.", ""].join("\n");
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
 
 if (!configured) {

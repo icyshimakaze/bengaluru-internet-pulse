@@ -65,7 +65,7 @@ function publicSignal(item: ItemRecord, topics: ReadState["topics"]) {
   return publicSignalSchema.parse({ id: item.id, source: item.source, sourceType: item.source === "gdelt" ? "news" : item.source === "bluesky" ? "social" : "tech",
     url: item.originalUrl, title: item.title, excerpt: item.excerpt.slice(0, 600), domain: item.domain, publishedAt: item.publishedAt,
     timeKind: item.timeKind, topicSlug: topics.find((t) => t.id === item.topicId)?.slug ?? null, neighborhood: item.neighborhood,
-    enrichmentStatus: item.enrichmentStatus });
+    enrichmentStatus: item.enrichmentStatus, enrichmentProvider: item.enrichmentProvider });
 }
 function selected(evidence: readonly Observation[], query: ReadQuery, now: Date) {
   const since = now.getTime() - Number.parseInt(query.window) * HOUR;

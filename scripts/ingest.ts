@@ -33,7 +33,7 @@ try {
       return host === "api.gdeltproject.org" ? fixtures.gdelt : host === "public.api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
     }) : undefined;
     const result = await ingest({ repository: new Repository(client), ...(fixtureMode ? {
-      mode: "demo", enrichmentMode: "mock", now: FIXTURE_NOW, timeoutMs: 1000, adapters,
+      mode: "demo", enrichmentProvider: "heuristic", now: FIXTURE_NOW, timeoutMs: 1000, adapters,
     } : {}) });
     const report = ingestionReport(result, fixtureMode);
     console.info(JSON.stringify(report));

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categorySchema, sourceSchema, sourceTypeSchema, slugSchema, neighborhoodSchema, httpUrlSchema,
   trendSchema, pulseSchema, hotspotSchema, sourceStatusSchema, trendLifecycleSchema } from "./schema";
 import { semanticCategorySchema } from "./enrichment";
+import { storedEnrichmentProviderSchema } from "./enrichment-providers";
 
 // Retain the original editorial buckets for existing API consumers.
 export const readCategorySchema = z.union([semanticCategorySchema, categorySchema]);
@@ -15,7 +16,8 @@ export type TopicListQuery = z.infer<typeof topicListQuerySchema>;
 export const publicSignalSchema = z.object({ id: z.string().min(1), source: sourceSchema, sourceType: sourceTypeSchema,
   url: httpUrlSchema, title: z.string().min(3).max(300), excerpt: z.string().max(600), domain: z.string().min(1),
   publishedAt: z.iso.datetime(), timeKind: z.enum(["published", "discovered"]), topicSlug: slugSchema.nullable(),
-  neighborhood: neighborhoodSchema.nullable(), enrichmentStatus: z.enum(["pending", "completed", "failed"]) }).strict();
+  neighborhood: neighborhoodSchema.nullable(), enrichmentStatus: z.enum(["pending", "completed", "failed"]),
+  enrichmentProvider: storedEnrichmentProviderSchema.nullable().default(null) }).strict();
 export type PublicSignal = z.infer<typeof publicSignalSchema>;
 export const publicTopicSchema = trendSchema.omit({ method: true, currentCount: true, baselineCount: true, totalCount: true, evidence: true })
   .extend({ activityCount: z.number().int().nonnegative(), semanticCategory: semanticCategorySchema,

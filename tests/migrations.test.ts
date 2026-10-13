@@ -4,6 +4,8 @@ import { loadMigrations, migrate } from "@/lib/db/schema";
 import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { now } from "./helpers";
 import { legacyLifecycle } from "@/lib/db/records";
+import { observation } from "./helpers";
+import { fromSignal } from "@/lib/db/mapping";
 
 const legacySql = `
   CREATE TABLE topics(slug TEXT PRIMARY KEY,payload TEXT NOT NULL);
@@ -17,10 +19,10 @@ const legacySql = `
 describe("versioned SQL migrations", () => {
   it("creates relational tables, required fields, indexes, foreign keys and an immutable ledger", async () => {
     const repo = testRepository();
-    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4, 5], version: 5 });
-    expect(await repo.initialize()).toEqual({ applied: [], version: 5 });
+    expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4, 5, 6], version: 6 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 6 });
     const expected = {
-      items: ["id", "source", "source_id", "canonical_url", "title", "excerpt", "domain", "published_at", "collected_at", "content_fingerprint", "topic_id", "category", "neighborhood", "local_relevance", "enrichment_status"],
+      items: ["id", "source", "source_id", "canonical_url", "title", "excerpt", "domain", "published_at", "collected_at", "content_fingerprint", "topic_id", "category", "neighborhood", "local_relevance", "enrichment_status", "enrichment_provider"],
       topics: ["id", "slug", "canonical_label", "category", "neighborhood", "first_seen_at", "last_seen_at", "lifecycle", "pulse_score", "confidence", "summary"],
       topic_snapshots: ["topic_id", "captured_at", "count_2h", "previous_count_2h", "count_6h", "count_24h", "source_count", "velocity_score", "volume_score", "diversity_score", "recency_score", "confidence", "pulse_score", "lifecycle"],
       ingestion_runs: ["id", "source", "started_at", "finished_at", "discovered", "inserted", "duplicates", "errors", "status", "error_message"],
@@ -31,17 +33,17 @@ describe("versioned SQL migrations", () => {
     }
     expect((await repo.client.execute("SELECT * FROM sqlite_master WHERE type='index' AND sql IS NOT NULL")).rows.length).toBeGreaterThanOrEqual(17);
     expect((await repo.client.execute("PRAGMA foreign_key_list(items)")).rows).toHaveLength(2);
-    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(5);
+    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(6);
     const edited = loadMigrations().map((m, i) => i ? m : { ...m, sql: m.sql + "\n-- edited" });
     await expect(migrate(repo.client, edited)).rejects.toThrow("has changed");
   });
   it("rolls back failed DDL without recording it and can retry a corrected migration", async () => {
     const repo = testRepository(); await repo.initialize();
-    const migration = { version: 6, name: "0006_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
+    const migration = { version: 7, name: "0007_failure.sql", sql: "CREATE TABLE rollback_probe(id TEXT); INSERT INTO missing_table VALUES (1);" };
     await expect(migrate(repo.client, [...loadMigrations(), migration])).rejects.toThrow();
     expect((await repo.client.execute("SELECT name FROM sqlite_master WHERE name='rollback_probe'")).rows).toHaveLength(0);
-    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(5);
-    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [6], version: 6 });
+    expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(6);
+    expect(await migrate(repo.client, [...loadMigrations(), { ...migration, sql: "CREATE TABLE rollback_probe(id TEXT);" }])).toEqual({ applied: [7], version: 7 });
     await expect(repo.initialize()).rejects.toThrow("Unsupported migration history");
   });
   it("rejects out-of-order versions and missing ledger entries", async () => {
@@ -78,7 +80,7 @@ describe("versioned SQL migrations", () => {
     expect(tables).not.toContain("observations");
     expect(tables).not.toContain("legacy_topics");
     expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
-    expect(await repo.initialize()).toEqual({ applied: [], version: 5 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 6 });
   });
   it("leaves the original legacy schema and rows intact if backfill validation fails", async () => {
     const repo = testRepository();
@@ -89,5 +91,28 @@ describe("versioned SQL migrations", () => {
     expect((await repo.client.execute("SELECT name FROM sqlite_master WHERE name='items'")).rows).toHaveLength(0);
     expect((await repo.client.execute("SELECT * FROM schema_migrations")).rows).toHaveLength(0);
     expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(1);
+  });
+  it("upgrades provider constraints while preserving historic mock/OpenAI provenance and all prior checksums", async () => {
+    const repo = testRepository(); await migrate(repo.client, loadMigrations().slice(0, 5), now);
+    const history = (await repo.client.execute("SELECT name,checksum FROM schema_migrations ORDER BY version")).rows;
+    for (const provider of ["mock", "openai"] as const) {
+      const signal = observation("historic-" + provider, 1);
+      await repo.insertItem(fromSignal(signal));
+      const result = { signal_id: signal.id, existing_topic_id: null,
+        new_topic: { canonical_label: "Bengaluru metro", slug: "bengaluru-metro", category: "traffic" },
+        canonical_label: "Bengaluru metro", slug: "bengaluru-metro", category: "traffic", neighborhood: "Citywide",
+        local_relevance: 1, summary: "Public mentions of Bengaluru metro.", confidence: 0.9 };
+      await repo.client.execute({ sql: "INSERT INTO item_enrichments VALUES (?,?,?,?,?,?)", args: [signal.id, provider,
+        provider === "openai" ? "gpt-6-luna" : null, JSON.stringify(result), 0.9, now.toISOString()] });
+    }
+    expect(await repo.initialize()).toEqual({ applied: [6], version: 6 });
+    expect((await repo.client.execute("SELECT name,checksum FROM schema_migrations WHERE version<=5 ORDER BY version")).rows).toEqual(history);
+    for (const provider of ["mock", "openai"] as const) {
+      const id = observation("historic-" + provider, 1).id;
+      expect(await repo.enrichment.find(id)).toMatchObject({ provider, model: provider === "openai" ? "gpt-6-luna" : null });
+      expect((await repo.client.execute({ sql: "SELECT enrichment_provider FROM items WHERE id=?", args: [id] })).rows[0]?.enrichment_provider).toBe(provider);
+    }
+    expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
+    expect(await repo.enrichment.recentRuns()).toEqual([]);
   });
 });

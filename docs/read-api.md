@@ -1,6 +1,8 @@
 # Public read/query layer
 
-Read routes and server functions are read-only. They never migrate, ingest, enrich or contact public sources/OpenAI. Turso configuration and clients live in server-only modules. Public DTOs omit credentials, database URLs, source IDs, content hashes, duplicate text fields, internal batch/topic IDs, classification payloads and raw error messages.
+Read routes and server functions are read-only. They never migrate, ingest, enrich or contact public sources/OpenAI/xKiro. Turso configuration and clients live in server-only modules. Public DTOs omit credentials, database URLs, source IDs, content hashes, duplicate text fields, internal batch/topic IDs, classification payloads and raw error messages.
+
+Public evidence includes the allowlisted actual `enrichmentProvider` (nullable for legacy/manual fixtures); dashboard enrichment metadata includes selected/actual providers and this run's AI/heuristic/error/fallback counters. A selected provider is not a claim that it processed evidence. Historical mock provenance stays marked as mock; new API failures identify heuristic fallback. No API keys, model payloads or provider exceptions are returned.
 
 ## Queries and windows
 

@@ -5,7 +5,8 @@ import { Repository } from "@/lib/db/repository";
 import { getDatabase } from "@/lib/db/client";
 import { fromSignal, toSignal } from "@/lib/db/mapping";
 import { type IngestionRun } from "@/lib/db/records";
-import { validateEnrichment, enrichmentTopicSchema, enrichmentProviderSchema, PRODUCTION_MODEL, editorialCategory, type EnrichmentTopic } from "@/lib/domain/enrichment";
+import { validateEnrichment, enrichmentTopicSchema, editorialCategory, type EnrichmentTopic } from "@/lib/domain/enrichment";
+import { enrichmentProviderSchema, validProviderModel, emptyEnrichmentRun, enrichmentRunSchema, actualProvider, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
 import { getEnv } from "@/lib/server/env";
 import { log } from "@/lib/server/logger";
 import { deduplicate } from "./normalize";
@@ -14,7 +15,7 @@ import { classifyAI, type Classification } from "./ai";
 type Options = {
   repository?: Repository; now?: Date; timeoutMs?: number;
   mode?: "live" | "demo";
-  enrichmentMode?: "mock" | "openai" | "off";
+  enrichmentProvider?: EnrichmentProviderName;
   adapters?: Record<(typeof sources)[number], SourceAdapter>;
   enrich?: typeof classifyAI;
 };
@@ -52,15 +53,23 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     })), lease, options.now ?? new Date());
     log("info", "ingest.collected", { returned: collected.length, unique: unique.length, inserted: added });
     const env = getEnv();
-    const enrichmentMode = options.enrichmentMode ?? env.ENRICHMENT_MODE;
-    if (enrichmentMode === "openai" && !env.OPENAI_API_KEY) log("warn", "enrichment.unavailable", { code: "ENRICHMENT_KEY_MISSING", provider: enrichmentMode });
+    const selected = isFixture ? "heuristic" : enrichmentProviderSchema.parse(options.enrichmentProvider ?? env.ENRICHMENT_PROVIDER);
+    let enrichmentRun = emptyEnrichmentRun(selected);
     const catalog = await repository.enrichment.activeTopics(now, isFixture);
-    const queue = (enrichmentMode === "off" || enrichmentMode === "openai" && !env.OPENAI_API_KEY) && !options.enrich ? []
-      : await repository.enrichment.claimPending(now, isFixture, env.ENRICHMENT_MAX_ITEMS, lease);
+    const queue = !env.ENRICHMENT_ENABLED ? [] : await repository.enrichment.claimPending(now, isFixture, env.MAX_AI_ITEMS_PER_RUN, lease);
     const candidates = queue.map(toSignal);
     let classifications = new Map<string, Classification>();
-    try { if (candidates.length) classifications = await (options.enrich ?? classifyAI)(candidates, catalog, { mode: enrichmentMode }); }
-    catch { log("warn", "enrichment.unavailable", { code: "ENRICHMENT_UNAVAILABLE" }); }
+    try { if (candidates.length) classifications = await (options.enrich ?? classifyAI)(candidates, catalog, {
+      provider: selected, onReport: (report) => { enrichmentRun = enrichmentRunSchema.parse(report); },
+    }); }
+    catch {
+      log("warn", "enrichment.unavailable", { selectedProvider: selected, code: "ENRICHMENT_UNAVAILABLE", fallback: "heuristic" });
+      // A provider/integration exception must not discard committed pending collection.
+      try {
+        classifications = await classifyAI(candidates, catalog, { provider: "heuristic" });
+        enrichmentRun.providerErrors++; enrichmentRun.fallbackCount = candidates.length;
+      } catch { log("warn", "enrichment.fallback_unavailable", { code: "ENRICHMENT_UNPROCESSED" }); }
+    }
     const validatedCatalog: EnrichmentTopic[] = [...catalog];
     const assignments: Classification[] = [];
     for (const signal of candidates) {
@@ -70,7 +79,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
         // Revalidate injected/provider results too; providers have no direct DB access.
         const result = validateEnrichment(match.result, signal, validatedCatalog);
         enrichmentProviderSchema.parse(match.provider);
-        if (match.provider === "mock" ? match.model !== null : match.model !== PRODUCTION_MODEL) throw new Error("ENRICHMENT_PROVIDER_MODEL");
+        if (!validProviderModel(match.provider, match.model)) throw new Error("ENRICHMENT_PROVIDER_MODEL");
         if (result.confidence < (result.existing_topic_id ? 0.75 : 0.6)) continue;
         if (result.local_relevance < 0.5) { assignments.push({ ...match, result, topic: null }); continue; }
         const target = enrichmentTopicSchema.parse(match.topic);
@@ -82,7 +91,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
         if (!record) {
           record = { id: target.id, slug: target.slug, canonicalLabel: target.canonical_label, category: editorialCategory[target.category],
             neighborhood, firstSeenAt: signal.publishedAt, lastSeenAt: signal.publishedAt, lifecycle: "inactive", pulseScore: 0,
-            confidence: 0, summary: result.summary, enrichmentMethod: match.provider === "openai" ? "ai" : "rules", isFixture };
+            confidence: 0, summary: result.summary, enrichmentMethod: match.provider === "heuristic" ? "rules" : "ai", isFixture };
           records.set(record.slug, record);
           topics.set(record.slug, { slug: record.slug, title: record.canonicalLabel, category: record.category, description: record.summary, method: record.enrichmentMethod });
         }
@@ -93,14 +102,24 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     }
     const complete = health.filter((s) => s.status === "ok" || s.status === "demo").length;
     const available = health.filter((s) => s.status === "ok" || s.status === "demo" || s.status === "partial").length;
+    enrichmentRun = enrichmentRunSchema.parse({ ...enrichmentRun, selectedProvider: selected, attempted: candidates.length,
+      actualProviders: [...new Set(assignments.map((a) => a.provider))],
+      aiEnriched: assignments.filter((a) => a.provider !== "heuristic").length,
+      heuristicEnriched: assignments.filter((a) => a.provider === "heuristic").length,
+      unprocessed: candidates.length - assignments.length });
     const template: Pulse = {
       version: "v2", mode: isFixture ? "demo" : "live", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false,
       status: isFixture ? "demo" : complete === 3 ? "healthy" : available > 0 ? "degraded" : "unavailable",
       trends: [], hotspots: [], sources: health, totalSignals: 0,
-      enrichment: { provider: assignments.length && assignments.every((a) => a.provider === "mock") ? "mock" : enrichmentMode, pending: 0, completed: 0, irrelevant: 0 },
+      enrichment: { provider: actualProvider(enrichmentRun), run: enrichmentRun, pending: 0, completed: 0, irrelevant: 0 },
       notice: isFixture ? "Fictional public-source fixtures. No live internet signals were collected." : complete === 3 ? null : available > 0 ? "Some source queries could not be completed. Momentum is based on the available evidence." : "All sources are currently unavailable. Previously collected evidence may still appear while it remains within the active window.",
     };
-    if (template.enrichment?.provider === "mock") template.notice = [template.notice, "Semantic enrichment uses a local mock; no OpenAI requests or charges."].filter(Boolean).join(" ");
+    if (enrichmentRun.heuristicEnriched) template.notice = [template.notice, `${enrichmentRun.heuristicEnriched} signals used deterministic heuristic topic matching.`].filter(Boolean).join(" ");
+    if (enrichmentRun.fallbackCount) {
+      if (!isFixture && template.status === "healthy") template.status = "degraded";
+      template.notice = [template.notice, `${selected} enrichment was unavailable for ${enrichmentRun.fallbackCount} signals; local heuristic fallback was used.`].filter(Boolean).join(" ");
+    }
+    if (!env.ENRICHMENT_ENABLED) template.notice = [template.notice, "Topic enrichment is disabled; collection continues safely."].filter(Boolean).join(" ");
     if (assignments.length < candidates.length) {
       if (!isFixture && template.status === "healthy") template.status = "degraded";
       template.notice = [template.notice, "Some collected signals remain unenriched and are excluded from trend scores."].filter(Boolean).join(" ");
@@ -112,7 +131,9 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
       source: run.source, status: run.status, discovered: run.discovered, inserted: run.inserted, duplicates: run.duplicates, errors: run.errors,
     });
     log("info", "ingest.completed", { status: result.pulse.status, added, ranked: result.pulse.trends.length, availableSources: available,
-      enrichmentProvider: enrichmentMode, enriched: assignments.length, pending: result.pulse.enrichment?.pending ?? 0,
+      selectedProvider: selected, actualProviders: enrichmentRun.actualProviders.join(",") || "none",
+      aiEnriched: enrichmentRun.aiEnriched, heuristicEnriched: enrichmentRun.heuristicEnriched,
+      providerErrors: enrichmentRun.providerErrors, fallbackCount: enrichmentRun.fallbackCount, pending: result.pulse.enrichment?.pending ?? 0,
       prunedItems: result.pruned.items, prunedSnapshots: result.pruned.snapshots, prunedPulseSnapshots: result.pruned.pulseSnapshots,
       prunedRuns: result.pruned.ingestionRuns, prunedTopics: result.pruned.topics });
     return { skipped: false, added, pulse: result.pulse, runs: result.runs, pruned: result.pruned };

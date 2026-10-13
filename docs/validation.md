@@ -1,5 +1,17 @@
 # Validation record
 
+## Multi-provider enrichment, 13 October 2026
+
+- `npm run lint`, `npm run typecheck` and `npm run build`: passed.
+- `npm test`: 263 tests passed across 21 files. SDK mocks cover OpenAI/xKiro selection, missing keys/models, vendor prefixes, 401/403/429/5xx, malformed/refused/incomplete output, timeouts, retries, batching, injection isolation, no API-to-API fallback and provider schema consistency. Genuine heuristic tests cover entities, categories, locations, summaries and event distinctions.
+- `npm run test:e2e`: all 19 browser tests passed, including responsive layouts, accessibility, maps, hydration and browser/backend request isolation. Tests now own dedicated ports 4317/4318 and never reuse unrelated development servers; the request-boundary check includes xKiro.
+- `npm run db:migrate`: migration 6 applied to the existing local database. Tests preserve migration 1–5 checksums and historical mock/OpenAI metadata, validate actual item/model provenance and every invocation's run counters (including repeated capture timestamps), and verify cascading retention and rejected persisted data.
+- `npm run ingest -- --fixtures`: passed with isolated fictional data and forced heuristic selection. Existing successful items were not re-enriched or relabeled; no external source or API request was made.
+- Actionlint passed. Browser static bundles contain no OpenAI/xKiro key names or API endpoints. All API-client tests used mocks; no real API credits were consumed.
+- Local defaults use heuristic processing; the intended scheduled deployment selects xKiro with provider-specific credentials/model configuration. Live xKiro/OpenAI account access was not tested.
+
+## Earlier implementation checks
+
 Scaffold verified on 6 October 2026; relational persistence, public-source ingestion and semantic enrichment verified on 7 October 2026; production scoring v2 and the public read/query layer verified on 8 October 2026, Windows, Node.js 26.8.1. CI is configured for Node.js 22, with the project requiring 22.13 or later.
 
 - `npm install` and clean `npm ci --no-audit --no-fund`: successful; generated lockfile checked for dependency consistency.
@@ -25,7 +37,7 @@ Scaffold verified on 6 October 2026; relational persistence, public-source inges
 
 The latest `npm run ingest` ran the complete pipeline against the public endpoints and exited successfully, publishing a real degraded snapshot in `.data/pulse.db`. Both HN queries returned valid empty recent results. GDELT hit its 35-second total source deadline after bounded retries; all five queries were recorded as failed. All four Bluesky searches had network errors after retries. The ingestion process recorded source health and per-source run counters and persisted zero observations without adding fixture data.
 
-This earlier public-source smoke test verifies failure handling, persistence and source health; it does not establish successful live payload retrieval from all three providers in this environment. Adapter contracts are additionally exercised with checked-in source fixtures. The enrichment verification uses local mocks and mocked SDK responses; no real OpenAI request or charge occurred. The default provider is `mock`, including the scheduled workflow.
+This earlier public-source smoke test verifies failure handling, persistence and source health; it does not establish successful live payload retrieval from all three providers in this environment. Adapter contracts are additionally exercised with checked-in source fixtures. The enrichment verification uses local mocks and mocked SDK responses; no real OpenAI request or charge occurred. At this earlier verification the provider was `mock`. The current multi-provider implementation defaults to heuristic locally and selects xKiro in the scheduled workflow; API failures use only heuristic fallback.
 
 ## Tooling notes
 

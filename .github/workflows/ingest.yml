@@ -2,15 +2,15 @@ name: Ingest public signals
 on:
   workflow_dispatch:
     inputs:
-      enrichment_mode:
-        description: "Topic matching provider (mock is free; openai explicitly opts into API usage)"
+      enrichment_provider:
+        description: "Topic matching provider (heuristic is local; API providers use their own credentials)"
         required: true
-        default: mock
+        default: xkiro
         type: choice
         options:
-          - mock
+          - xkiro
+          - heuristic
           - openai
-          - off
       check_configuration:
         description: "Check secret presence only; do not collect signals or write data"
         required: false
@@ -58,10 +58,15 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
           APP_DATA_MODE: live
-          ENRICHMENT_MODE: ${{ inputs.enrichment_mode || vars.PULSE_ENRICHMENT_MODE || 'mock' }}
-          ENRICHMENT_BATCH_SIZE: "10"
-          ENRICHMENT_MAX_ITEMS: "30"
+          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
+          ENRICHMENT_ENABLED: ${{ vars.ENRICHMENT_ENABLED || 'true' }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
+          XKIRO_BASE_URL: ${{ vars.XKIRO_BASE_URL || 'https://api.xkiro.com/v1' }}
+          XKIRO_MODEL: ${{ vars.XKIRO_MODEL }}
+          AI_BATCH_SIZE: ${{ vars.AI_BATCH_SIZE || '10' }}
+          MAX_AI_ITEMS_PER_RUN: ${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}
           SOURCE_TIMEOUT_MS: "8000"
         run: npm run ingest -- --require-remote
       - name: Report unsuccessful job

@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { LIVE_BASE_URL } from "./urls";
 
 test("editorial homepage explains Bengaluru, momentum, evidence and honest demo status", async ({ page }) => {
   const errors: string[] = [], backendRequests: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("request", (r) => { if (/(api\.openai\.com|\.turso\.io|api\.gdeltproject\.org|public\.api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
+  page.on("request", (r) => { if (/(api\.openai\.com|api\.xkiro\.com|\.turso\.io|api\.gdeltproject\.org|public\.api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "What is suddenly getting attention across Bengaluru?" })).toBeVisible();
@@ -176,17 +177,17 @@ test("desktop, tablet and mobile are accessible without overflow or hydration er
 });
 
 test("unconfigured live mode is delayed, empty and operationally unavailable", async ({ page, request }) => {
-  await page.goto("http://127.0.0.1:3001/");
+  await page.goto(`${LIVE_BASE_URL}/`);
   await expect(page.getByRole("heading", { name: "Waiting for a pulse" })).toBeVisible();
   await expect(page.locator(".live-indicator")).toContainText("DELAYED");
   await expect(page.locator(".mode-notice")).not.toContainText("DEMO");
   await expect(page.locator(".trend-entry")).toHaveCount(0);
   await expect(page.locator(".stat-updated dd")).toContainText("Pending");
-  const response = await request.get("http://127.0.0.1:3001/api/pulse");
+  const response = await request.get(`${LIVE_BASE_URL}/api/pulse`);
   expect(response.status()).toBe(503); expect((await response.json()).generatedAt).toBeNull();
   await page.getByRole("button", { name: "Check for an update" }).click();
   await expect(page.getByRole("heading", { name: "Waiting for a pulse" })).toBeVisible();
-  const health = await request.get("http://127.0.0.1:3001/api/health");
+  const health = await request.get(`${LIVE_BASE_URL}/api/health`);
   expect(health.status()).toBe(503);
   expect(await health.json()).toMatchObject({ application: { status: "ok" }, database: { status: "unconfigured" }, recentSignalCount: null });
 });

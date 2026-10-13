@@ -12,17 +12,18 @@ import { DAY } from "@/lib/db/data-repository";
 function adapters(count = 2): Record<Source, SourceAdapter> {
   const adapter = (source: Source): SourceAdapter => async () => ({
     signals: Array.from({ length: count }, (_, n) => {
-      const text = `Bengaluru metro ${source} discussion ${n}`;
-      return { ...observation(`${source}-${n}`, 1, source), title: text, text, excerpt: text };
+      const text = n % 2 ? "Bangalore metro service delayed" : "Bengaluru metro service delays";
+      const excerpt = `${text}. Independent signal reference ${source} ${n}.`;
+      return { ...observation(`${source}-${n}`, 1, source), title: text, text: excerpt, excerpt };
     }), health: { source, status: "ok", fetched: count, accepted: count, rejected: 0, durationMs: 0, checkedAt: now.toISOString() },
   });
   return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews") };
 }
-const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { mode: "mock" });
+const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { provider: "heuristic" });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("durable semantic enrichment queue", () => {
-  it("never sends completed items again and retains validated mock provenance separately from trend confidence", async () => {
+  it("never sends completed items again and retains heuristic provenance separately from trend confidence", async () => {
     const repo = testRepository(), enrich = vi.fn(mock);
     const first = await ingest({ repository: repo, now, adapters: adapters(), enrich });
     await ingest({ repository: repo, now, adapters: adapters(), enrich });
@@ -31,21 +32,24 @@ describe("durable semantic enrichment queue", () => {
     expect(data.items).toHaveLength(6); expect(data.topicRecords).toHaveLength(1);
     expect(data.items.every((i) => i.enrichmentStatus === "completed")).toBe(true);
     const metadata = await repo.enrichment.find(data.items[0]!.id);
-    expect(metadata).toMatchObject({ provider: "mock", model: null, result: { category: "traffic", confidence: 0.9, neighborhood: "Citywide" } });
+    expect(metadata).toMatchObject({ provider: "heuristic", model: null, result: { category: "traffic", neighborhood: "Citywide" } });
+    expect(data.items.every((i) => i.enrichmentProvider === "heuristic")).toBe(true);
     expect(data.topicRecords[0]!.confidence).toBe(first.pulse!.trends[0]!.confidence);
     expect(data.topicRecords[0]!.confidence).not.toBe(metadata!.result.confidence);
-    expect(first.pulse?.notice).toContain("local mock");
+    expect(first.pulse?.notice).toContain("deterministic heuristic");
+    // Even repeated capture timestamps must retain each invocation's counters.
+    expect((await repo.enrichment.recentRuns()).map((run) => run.report.attempted)).toEqual([0, 6]);
     expect(await repo.fetchHotspotActivity({ since: new Date(now.getTime() - DAY), until: now })).toEqual([]);
   });
-  it("retains collected signals on provider failure and recovers them after cooldown without duplicating collection", async () => {
+  it("retains unprocessed signals and recovers them after cooldown without duplicating collection", async () => {
     const repo = testRepository();
-    const failed = await ingest({ repository: repo, now, adapters: adapters(), enrich: async () => { throw new Error("API offline"); } });
+    const failed = await ingest({ repository: repo, now, adapters: adapters(), enrich: async () => new Map() });
     expect(failed).toMatchObject({ added: 6, pulse: { status: "degraded", totalSignals: 0, trends: [] } });
     expect((await repo.load(now)).items.every((i) => i.enrichmentStatus === "pending")).toBe(true);
     const enrich = vi.fn(mock);
     await ingest({ repository: repo, now: new Date(now.getTime() + 5 * 60000), adapters: adapters(), enrich });
     expect(enrich).not.toHaveBeenCalled();
-    expect((await repo.latest())?.enrichment).toMatchObject({ provider: "mock", pending: 6, completed: 0 });
+    expect((await repo.latest())?.enrichment).toMatchObject({ provider: "none", pending: 6, completed: 0 });
     expect((await repo.latest())?.status).toBe("degraded");
     const recovered = await ingest({ repository: repo, now: new Date(now.getTime() + 15 * 60000), adapters: adapters(), enrich });
     expect(recovered.added).toBe(0); expect(recovered.pulse?.totalSignals).toBe(6);
@@ -63,7 +67,7 @@ describe("durable semantic enrichment queue", () => {
     expect((await repo.load(new Date(now.getTime() + 45 * 60000))).items.every((i) => i.enrichmentStatus === "pending")).toBe(true);
   });
   it("saves every new signal while bounding enrichment work and lets later polls drain the queue", async () => {
-    vi.stubEnv("ENRICHMENT_MAX_ITEMS", "4"); vi.stubEnv("ENRICHMENT_BATCH_SIZE", "2");
+    vi.stubEnv("MAX_AI_ITEMS_PER_RUN", "4"); vi.stubEnv("AI_BATCH_SIZE", "2");
     const repo = testRepository(), enrich = vi.fn(mock);
     const first = await ingest({ repository: repo, now, adapters: adapters(10), enrich });
     expect(first.added).toBe(30);
@@ -99,24 +103,27 @@ describe("durable semantic enrichment queue", () => {
     expect((await repo.client.execute("SELECT * FROM item_enrichments")).rows).toHaveLength(0);
   });
   it("does not consume attempts in off mode and preserves unprocessed signals", async () => {
-    vi.stubEnv("ENRICHMENT_MODE", "off"); const repo = testRepository();
+    vi.stubEnv("ENRICHMENT_ENABLED", "false"); const repo = testRepository();
     await ingest({ repository: repo, now, adapters: adapters() });
     expect((await repo.load(now)).items).toHaveLength(6);
     expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows.every((r) => r.enrichment_attempts === 0)).toBe(true);
     expect((await repo.load(now)).observations).toHaveLength(0);
   });
-  it("preserves pending signals and retry budget when explicit OpenAI credentials are missing", async () => {
-    vi.stubEnv("ENRICHMENT_MODE", "openai"); vi.stubEnv("OPENAI_API_KEY", "");
+  it("uses heuristic fallback when OpenAI credentials are missing and persists honest run counters", async () => {
+    vi.stubEnv("ENRICHMENT_PROVIDER", "openai"); vi.stubEnv("OPENAI_API_KEY", "");
     const repo = testRepository();
     const result = await ingest({ repository: repo, now, adapters: adapters() });
-    expect(result.added).toBe(6); expect(result.pulse?.enrichment).toMatchObject({ provider: "openai", pending: 6, completed: 0 });
-    expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows.every((r) => r.enrichment_attempts === 0)).toBe(true);
+    expect(result.added).toBe(6); expect(result.pulse?.enrichment).toMatchObject({ provider: "heuristic", pending: 0, completed: 6,
+      run: { selectedProvider: "openai", actualProviders: ["heuristic"], aiEnriched: 0, heuristicEnriched: 6, providerErrors: 1, fallbackCount: 6 } });
+    const history = await repo.enrichment.recentRuns();
+    expect(history[0]?.report).toEqual(result.pulse?.enrichment?.run);
+    expect((await repo.load(now)).items.every((i) => i.enrichmentProvider === "heuristic")).toBe(true);
   });
-  it("forces mock mode for fixtures even if the environment selects OpenAI", async () => {
-    vi.stubEnv("ENRICHMENT_MODE", "openai"); vi.stubEnv("OPENAI_API_KEY", "");
+  it("forces heuristic processing for fixtures even if both environment and caller select API providers", async () => {
+    vi.stubEnv("ENRICHMENT_PROVIDER", "openai"); vi.stubEnv("OPENAI_API_KEY", "");
     const repo = testRepository();
-    const result = await ingest({ repository: repo, now, mode: "demo", enrichmentMode: "mock", adapters: adapters() });
-    expect(result.pulse?.enrichment).toMatchObject({ provider: "mock", completed: 6, pending: 0 });
+    const result = await ingest({ repository: repo, now, mode: "demo", enrichmentProvider: "xkiro", adapters: adapters() });
+    expect(result.pulse?.enrichment).toMatchObject({ provider: "heuristic", completed: 6, pending: 0 });
     expect((await repo.load(now, true)).items.every((i) => i.enrichmentStatus === "completed")).toBe(true);
   });
   it("adds migration 4 to existing databases without losing data or changing prior migration checksums", async () => {
@@ -124,7 +131,7 @@ describe("durable semantic enrichment queue", () => {
     const signal = observation("existing", 1), item = fromSignal(signal);
     await repo.insertItem(item);
     const checksums = (await repo.client.execute("SELECT checksum FROM schema_migrations ORDER BY version")).rows;
-    expect(await repo.initialize()).toEqual({ applied: [4, 5], version: 5 });
+    expect(await repo.initialize()).toEqual({ applied: [4, 5, 6], version: 6 });
     expect((await repo.load(now)).items).toEqual([item]);
     expect((await repo.client.execute("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")).rows).toEqual(checksums);
     expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows[0]?.enrichment_attempts).toBe(0);
@@ -138,5 +145,22 @@ describe("durable semantic enrichment queue", () => {
     const pruned = await repo.pruneOldData(new Date(now.getTime() + 15 * DAY));
     expect(pruned.items).toBe(6); expect((await repo.client.execute("SELECT * FROM item_enrichments")).rows).toHaveLength(0);
     expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toHaveLength(0);
+  });
+  it("persists a vendor-prefixed xKiro model and actual item/run provider without calling an API", async () => {
+    const repo = testRepository();
+    const result = await ingest({ repository: repo, now, adapters: adapters(), enrichmentProvider: "xkiro", enrich: async (signals, topics) => {
+      const values = await mock(signals, topics);
+      return new Map([...values].map(([id, assignment]) => [id, { ...assignment, provider: "xkiro" as const, model: "google/test-model" }]));
+    } });
+    const data = await repo.load(now);
+    expect(data.items.every((i) => i.enrichmentProvider === "xkiro")).toBe(true);
+    expect(await repo.enrichment.find(data.items[0]!.id)).toMatchObject({ provider: "xkiro", model: "google/test-model" });
+    expect(result.pulse?.enrichment).toMatchObject({ provider: "xkiro", run: { selectedProvider: "xkiro", aiEnriched: 6, heuristicEnriched: 0, fallbackCount: 0 } });
+    const report = (await repo.enrichment.recentRuns())[0]!.report;
+    expect(report).toEqual(result.pulse?.enrichment?.run);
+    await repo.client.execute({ sql: "UPDATE enrichment_runs SET payload=?", args: [JSON.stringify({ ...report, aiEnriched: 99 })] });
+    await expect(repo.enrichment.recentRuns()).rejects.toThrow();
+    await repo.pruneOldData(new Date(now.getTime() + 31 * DAY));
+    expect((await repo.client.execute("SELECT * FROM enrichment_runs")).rows).toHaveLength(0);
   });
 });
