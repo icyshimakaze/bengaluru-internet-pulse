@@ -3,75 +3,44 @@ on:
   workflow_dispatch:
     inputs:
       enrichment_provider:
-        description: "Use repository ENRICHMENT_PROVIDER or override for this run"
-        required: true
-        default: repository
-        type: choice
-        options:
-          - repository
-          - xkiro
-          - heuristic
-          - openai
+        type: string
+        default: heuristic
       check_configuration:
-        description: "Check secret presence only; do not collect signals or write data"
-        required: false
-        default: false
         type: boolean
-  schedule:
-    - cron: "17,47 * * * *"
+        default: false
 permissions:
   contents: read
 concurrency:
   group: pulse-production-ingestion
   cancel-in-progress: false
 jobs:
-  ingest:
-    name: Check configuration and ingest when ready
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Check out repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - name: Check required database configuration
-        id: configuration
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          CHECK_CONFIGURATION: ${{ inputs.check_configuration || 'false' }}
-        run: node scripts/check-ingestion-config.mjs
-      - name: Set up Node.js
-        if: steps.configuration.outputs.should_ingest == 'true'
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22
           cache: npm
-      - name: Install locked dependencies
-        if: steps.configuration.outputs.should_ingest == 'true'
-        run: npm ci
-      - name: Collect, enrich and publish momentum
-        id: ingest
-        if: steps.configuration.outputs.should_ingest == 'true'
-        timeout-minutes: 3
+      - run: npm ci
+      - name: Inspect actual stored data before collection
         env:
-          # Secret values never enter dependency installation or action setup.
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
+        run: node scripts/audit-remote-data.mjs before
+      - name: Fresh public source ingestion without paid enrichment
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          ENRICHMENT_PROVIDER: heuristic
           APP_DATA_MODE: live
-          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
-          ENRICHMENT_ENABLED: ${{ vars.ENRICHMENT_ENABLED || 'true' }}
-          # Empty model/base URL variables use application defaults; only the selected provider is validated.
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          XKIRO_BASE_URL: ${{ vars.XKIRO_BASE_URL }}
-          XKIRO_MODEL: ${{ vars.XKIRO_MODEL }}
-          AI_BATCH_SIZE: ${{ vars.AI_BATCH_SIZE || '10' }}
-          MAX_AI_ITEMS_PER_RUN: ${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}
-          SOURCE_TIMEOUT_MS: "8000"
         run: npm run ingest -- --require-remote
-      - name: Report unsuccessful job
-        if: failure()
-        run: |
-          echo "::error::Scheduled ingestion failed. Check configuration, database access and the structured ingestion summary; no credentials are logged."
+      - name: Inspect actual stored data after collection
+        if: always()
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: node scripts/audit-remote-data.mjs after
