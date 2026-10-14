@@ -89,7 +89,7 @@ jobs:
           } catch (error) {
             const messages = [error?.message, error?.cause?.message].filter((v) => typeof v === 'string').join(' ');
             const knownCodes = new Set(['SERVER_ERROR', 'HTTP_SERVER_ERROR', 'SQLITE_AUTH', 'SQLITE_ERROR', 'SQLITE_READONLY', 'SQLITE_NOTADB', 'SQLITE_CANTOPEN', 'SQLITE_CONSTRAINT_FOREIGNKEY', 'TRANSACTION_CLOSED', 'TRANSACTION_TIMEOUT']);
-            const code = knownCodes.has(error?.code) ? error.code : 'MIGRATION_FAILED';
+            const code = knownCodes.has(error?.code) || typeof error?.code === 'string' && /^[A-Z][A-Z_0-9]{0,59}$/.test(error.code) ? error.code : 'MIGRATION_FAILED';
             const reason = /table.*already exists/i.test(messages) ? 'TABLE_ALREADY_EXISTS'
               : /read.?only/i.test(messages) ? 'WRITE_PERMISSION_REQUIRED'
               : /foreign.?key/i.test(messages) ? 'FOREIGN_KEY_INTEGRITY'
@@ -98,7 +98,13 @@ jobs:
               : /unsupported|not supported/i.test(messages) ? 'UNSUPPORTED_SQL'
               : /migration.*has changed|migration history/i.test(messages) ? 'MIGRATION_HISTORY'
               : 'UNCLASSIFIED_MIGRATION_FAILURE';
-            console.error(JSON.stringify({ event: 'database.migration_failed', code, reason }));
+            // This isolated diagnostic has only built-in schema SQL and an empty
+            // database. Redact credential values and URLs before reporting a
+            // bounded diagnostic; production CLI responses remain code-only.
+            const diagnostic = messages.replaceAll(process.env.TURSO_AUTH_TOKEN, '[redacted]')
+              .replaceAll(process.env.TURSO_DATABASE_URL, '[redacted]')
+              .replace(/(?:libsql|https?):\/\/[^\s"'<>]+/g, '[redacted-url]').slice(0, 300);
+            console.error(JSON.stringify({ event: 'database.migration_failed', code, reason, diagnostic }));
             process.exitCode = 1;
           } finally { client.close(); }
           JS
