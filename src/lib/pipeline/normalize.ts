@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
+import { sameSyndicatedContent, syndicationSignature } from "./syndication";
 
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export function cleanText(value: string): string {
@@ -56,13 +57,18 @@ export function deduplicate<T extends Signal>(signals: readonly T[], existing: r
   const contents = new Set(existing.flatMap((s) => [s.contentHash, contentFingerprint({ title: s.title, excerpt: s.text, domain: s.domain })]));
   const ids = new Set(existing.map((s) => s.id));
   const sourceIds = new Set(existing.map((s) => `${s.source}:${s.sourceId}`));
+  const copies = existing.map(syndicationSignature);
   return [...signals].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt) || a.id.localeCompare(b.id)).filter((s) => {
     const identity = `${s.source}:${s.sourceId}`;
     if (urls.has(s.canonicalUrl) || contents.has(s.contentHash) || ids.has(s.id) || sourceIds.has(identity)) return false;
+    const signature = syndicationSignature(s);
+    if (copies.some((copy) => sameSyndicatedContent(signature, copy))) return false;
+    copies.push(signature);
     urls.add(s.canonicalUrl); contents.add(s.contentHash); ids.add(s.id); sourceIds.add(identity); return true;
   });
 }
 export function isBengaluruRelevant(text: string): boolean { return /\b(bengaluru|bangalore|bengalooru|namma\s+metro|bmrcl|bbmp)\b|ಬೆಂಗಳೂರು/i.test(text); }
 export function locate(text: string): Neighborhood | null {
-  return neighborhoods.find((n) => new RegExp(`\\b${n.replace(/ /g, "\\s+")}\\b`, "i").test(text)) ?? null;
+  const areas = neighborhoods.filter((n) => new RegExp(`\\b${n.replace(/ /g, "\\s+")}\\b`, "i").test(text.replace(/https?:\/\/\S+/gu, " ")));
+  return areas.length === 1 ? areas[0]! : null;
 }

@@ -12,11 +12,13 @@ const postSchema = z.object({
   record: z.object({ text: z.string().max(20000), createdAt: z.iso.datetime({ offset: true }) }),
   embed: z.unknown().optional(),
 });
-const externalSchema = z.object({ external: z.object({ uri: httpUrlSchema }) });
+const externalSchema = z.object({ external: z.object({ uri: httpUrlSchema, title: z.string().max(20000).optional(), description: z.string().max(20000).optional() }) });
 const recordMediaSchema = z.object({ media: externalSchema });
 export function blueskyQueries(now: Date): SourceQuery[] {
+  // Search is unavailable on the cached public host (403); the official AppView
+  // serves this public query without account credentials.
   return ["Bengaluru", "Bangalore", "Namma Metro", "ಬೆಂಗಳೂರು"].map((q, i) => ({ id: "search-" + i, limit: 50,
-    url: "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?" + new URLSearchParams({ q, sort: "latest", limit: "50",
+    url: "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?" + new URLSearchParams({ q, sort: "latest", limit: "50",
       since: new Date(now.getTime() - 86400000).toISOString(), until: now.toISOString() }) }));
 }
 export function createBlueskyAdapter(transport: Transport = fetchJson, options: AdapterOptions = {}) {
@@ -26,9 +28,11 @@ export function createBlueskyAdapter(transport: Transport = fetchJson, options: 
       if (!parsed.success) return null;
       const d = parsed.data, match = d.uri.match(/^at:\/\/(.+)\/app\.bsky\.feed\.post\/(.+)$/)!;
       const external = externalSchema.safeParse(d.embed), media = recordMediaSchema.safeParse(d.embed);
-      const contentUrl = external.success ? external.data.external.uri : media.success ? media.data.media.external.uri : undefined;
+      const linked = external.success ? external.data.external : media.success ? media.data.media.external : undefined;
+      const contentUrl = linked?.uri;
+      const text = [d.record.text, linked?.title, linked?.description].filter(Boolean).join("\n");
       return normalize({ source: "bluesky", sourceId: d.uri, url: `https://bsky.app/profile/${match[1]}/post/${match[2]}`,
-        contentUrl, title: d.record.text, text: d.record.text, publishedAt: d.record.createdAt }, now);
+        contentUrl, title: d.record.text, text, publishedAt: d.record.createdAt }, now);
     },
   }, transport, options);
 }

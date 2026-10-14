@@ -1,5 +1,6 @@
 import { type Observation, type Topic, type Trend, type Hotspot, coordinates, sources } from "@/lib/domain/schema";
 import { contentFingerprint, canonicalUrl } from "@/lib/pipeline/normalize";
+import { sameSyndicatedContent, syndicationSignature } from "@/lib/pipeline/syndication";
 
 export const HOUR = 3600000;
 export const ALGORITHM_VERSION = "v2" as const;
@@ -28,6 +29,13 @@ export function deduplicateEvidence(input: readonly Observation[], now: Date): O
       const seen = identities.get(key);
       if (seen === undefined) identities.set(key, i);
       else { const a = root(i), b = root(seen); parents[Math.max(a, b)] = Math.min(a, b); }
+    }
+  }
+  const signatures = ordered.map(syndicationSignature);
+  for (let i = 0; i < ordered.length; i++) {
+    if (!signatures[i]!.linked) continue;
+    for (let j = 0; j < i; j++) if (root(i) !== root(j) && sameSyndicatedContent(signatures[i]!, signatures[j]!)) {
+      const a = root(i), b = root(j); parents[Math.max(a, b)] = Math.min(a, b);
     }
   }
   const seen = new Set<number>();

@@ -8,7 +8,12 @@ export function validateBatch(output: unknown, signals: Signal[], catalog: Enric
   const ids = new Set(parsed.items.map((i) => i.signal_id));
   if (ids.size !== signals.length || byId.size !== signals.length || parsed.items.length !== signals.length ||
       parsed.items.some((i) => !byId.has(i.signal_id))) throw new Error("ENRICHMENT_BATCH_IDS");
-  const valid = parsed.items.map((item) => validateEnrichment(item, byId.get(item.signal_id)!, catalog));
+  const supported: EnrichmentTopic[] = [];
+  const valid = parsed.items.map((item) => {
+    const result = validateEnrichment(item, byId.get(item.signal_id)!, catalog, supported);
+    if (result.new_topic) supported.push({ id: result.slug, ...result.new_topic });
+    return result;
+  });
   const proposals = new Map<string, EnrichmentResult>();
   for (const item of valid) if (item.new_topic) {
     const other = proposals.get(item.slug), known = catalog.find((t) => t.slug === item.slug);

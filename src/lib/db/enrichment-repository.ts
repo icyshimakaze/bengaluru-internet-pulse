@@ -47,7 +47,7 @@ export class EnrichmentRepository {
       await verifyLease(tx, owner, now);
       const rows = await tx.execute({ sql: `SELECT * FROM items WHERE is_fixture=? AND enrichment_status IN ('pending','failed')
         AND published_at>=? AND published_at<=? AND enrichment_attempts<3 AND (enrichment_attempted_at IS NULL OR enrichment_attempted_at<=?)
-        ORDER BY enrichment_attempts ASC,published_at ASC,id ASC LIMIT ?`, args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString(),
+        ORDER BY enrichment_attempts ASC,published_at DESC,id ASC LIMIT ?`, args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString(),
         new Date(now.getTime() - 15 * 60000).toISOString(), limit] });
       const items = rows.rows.map(itemFromRow);
       if (items.length) await tx.batch(items.map((i) => ({ sql: "UPDATE items SET enrichment_attempts=enrichment_attempts+1,enrichment_attempted_at=? WHERE id=?", args: [now.toISOString(), i.id] })));
