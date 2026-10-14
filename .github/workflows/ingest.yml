@@ -1,5 +1,5 @@
 name: Ingest public signals
-run-name: Read-only Turso connection diagnostic
+run-name: Turso migration initialization diagnostic
 on:
   workflow_dispatch:
     inputs:
@@ -56,6 +56,9 @@ jobs:
             z.literal(1).parse((await client.execute('SELECT 1 AS connected')).rows[0]?.connected);
             console.info(JSON.stringify({ event: 'database.connected' }));
             stage = 'schema';
+            const knownTables = ['schema_migrations', 'topics', 'items', 'ingestion_runs', 'pulse_snapshots', 'topic_snapshots', 'leases'];
+            const tables = await client.execute("SELECT name FROM sqlite_master WHERE type='table'");
+            console.info(JSON.stringify({ event: 'database.tables', known: tables.rows.map((r) => r.name).filter((name) => knownTables.includes(name)), otherCount: tables.rows.filter((r) => !knownTables.includes(r.name)).length }));
             const table = await client.execute({ sql: 'SELECT count(*) AS count FROM sqlite_master WHERE type=? AND name=?', args: ['table', 'schema_migrations'] });
             const exists = z.number().int().nonnegative().parse(table.rows[0]?.count);
             if (exists) {
@@ -70,4 +73,32 @@ jobs:
             console.error(JSON.stringify({ event: 'database.probe_failed', stage, code, status }));
             process.exitCode = 1;
           } finally { client?.close(); }
+          JS
+      - name: Apply existing atomic migrations with sanitized diagnostics
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          node --conditions=react-server --import=tsx --input-type=module <<'JS'
+          import { createClient } from '@libsql/client';
+          import { migrate } from './src/lib/db/schema.ts';
+          const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+          try {
+            const result = await migrate(client);
+            console.info(JSON.stringify({ event: 'database.migrated', ...result }));
+          } catch (error) {
+            const messages = [error?.message, error?.cause?.message].filter((v) => typeof v === 'string').join(' ');
+            const knownCodes = new Set(['SERVER_ERROR', 'HTTP_SERVER_ERROR', 'SQLITE_AUTH', 'SQLITE_ERROR', 'SQLITE_READONLY', 'SQLITE_NOTADB', 'SQLITE_CANTOPEN', 'SQLITE_CONSTRAINT_FOREIGNKEY', 'TRANSACTION_CLOSED', 'TRANSACTION_TIMEOUT']);
+            const code = knownCodes.has(error?.code) ? error.code : 'MIGRATION_FAILED';
+            const reason = /table.*already exists/i.test(messages) ? 'TABLE_ALREADY_EXISTS'
+              : /read.?only/i.test(messages) ? 'WRITE_PERMISSION_REQUIRED'
+              : /foreign.?key/i.test(messages) ? 'FOREIGN_KEY_INTEGRITY'
+              : /transaction.*(?:closed|rolled back)/i.test(messages) ? 'TRANSACTION_CLOSED'
+              : /syntax/i.test(messages) ? 'SQL_SYNTAX'
+              : /unsupported|not supported/i.test(messages) ? 'UNSUPPORTED_SQL'
+              : /migration.*has changed|migration history/i.test(messages) ? 'MIGRATION_HISTORY'
+              : 'UNCLASSIFIED_MIGRATION_FAILURE';
+            console.error(JSON.stringify({ event: 'database.migration_failed', code, reason }));
+            process.exitCode = 1;
+          } finally { client.close(); }
           JS
