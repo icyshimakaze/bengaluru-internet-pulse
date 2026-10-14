@@ -1,110 +1,35 @@
 name: Ingest public signals
-run-name: Turso migration initialization diagnostic
 on:
   workflow_dispatch:
     inputs:
       enrichment_provider:
-        type: choice
-        default: repository
-        options: [repository, heuristic, xkiro, openai]
+        required: false
+        type: string
+        default: heuristic
       check_configuration:
+        required: false
         type: boolean
         default: true
 permissions:
   contents: read
 jobs:
   probe:
-    name: Read-only Turso connection probe
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Probe connectivity and migration history with read-only SQL
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      - name: Probe official public search hosts without credentials
         run: |
-          node --input-type=module <<'JS'
-          import { createClient } from '@libsql/client';
-          import { z } from 'zod';
-          let client;
-          let stage = 'configuration';
-          try {
-            const config = z.object({ TURSO_DATABASE_URL: z.string().min(1), TURSO_AUTH_TOKEN: z.string().min(1) }).parse(process.env);
-            const url = new URL(config.TURSO_DATABASE_URL);
-            if (!['libsql:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('INVALID_DATABASE_CONFIGURATION');
-            const parts = config.TURSO_AUTH_TOKEN.split('.');
-            if (parts.length === 3) {
-              try {
-                const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-                console.info(JSON.stringify({ event: 'database.token_metadata', expired: typeof claims.exp === 'number' && claims.exp <= Date.now() / 1000 }));
-              } catch { console.info(JSON.stringify({ event: 'database.token_metadata', tokenFormat: 'unknown' })); }
+          node --input-type=module <<'NODE'
+          const now = new Date();
+          const params = new URLSearchParams({ q: 'Bengaluru', sort: 'latest', limit: '1', since: new Date(now.getTime()-86400000).toISOString(), until: now.toISOString() });
+          for (const host of ['public.api.bsky.app', 'api.bsky.app']) {
+            const start = Date.now();
+            try {
+              const response = await fetch('https://' + host + '/xrpc/app.bsky.feed.searchPosts?' + params, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000), cache: 'no-store', credentials: 'omit' });
+              const body = await response.json().catch(() => null);
+              console.info(JSON.stringify({ event: 'source.probe', host, status: response.status, ms: Date.now()-start, count: Array.isArray(body?.posts) ? body.posts.length : null, error: typeof body?.error === 'string' ? body.error.slice(0,80) : undefined }));
+            } catch (error) {
+              console.info(JSON.stringify({ event: 'source.probe', host, ms: Date.now()-start, error: error.name }));
             }
-            client = createClient({ url: config.TURSO_DATABASE_URL, authToken: config.TURSO_AUTH_TOKEN, fetch: async (input, init) => {
-              const response = await fetch(input, { ...init, signal: AbortSignal.timeout(8000) });
-              if (!response.ok) console.info(JSON.stringify({ event: 'database.http_status', status: response.status }));
-              return response;
-            } });
-            stage = 'connection';
-            z.literal(1).parse((await client.execute('SELECT 1 AS connected')).rows[0]?.connected);
-            console.info(JSON.stringify({ event: 'database.connected' }));
-            stage = 'schema';
-            const knownTables = ['schema_migrations', 'topics', 'items', 'ingestion_runs', 'pulse_snapshots', 'topic_snapshots', 'leases'];
-            const tables = await client.execute("SELECT name FROM sqlite_master WHERE type='table'");
-            console.info(JSON.stringify({ event: 'database.tables', known: tables.rows.map((r) => r.name).filter((name) => knownTables.includes(name)), otherCount: tables.rows.filter((r) => !knownTables.includes(r.name)).length }));
-            const table = await client.execute({ sql: 'SELECT count(*) AS count FROM sqlite_master WHERE type=? AND name=?', args: ['table', 'schema_migrations'] });
-            const exists = z.number().int().nonnegative().parse(table.rows[0]?.count);
-            if (exists) {
-              const history = await client.execute('SELECT version,name FROM schema_migrations ORDER BY version');
-              const migrations = z.array(z.object({ version: z.number().int(), name: z.string() })).parse(history.rows);
-              console.info(JSON.stringify({ event: 'database.migration_history', migrations }));
-            } else console.info(JSON.stringify({ event: 'database.migration_history', migrations: [], initialized: false }));
-          } catch (error) {
-            const known = new Set(['SERVER_ERROR', 'HTTP_SERVER_ERROR', 'SQLITE_AUTH', 'SQLITE_ERROR', 'SQLITE_READONLY', 'SQLITE_NOTADB', 'SQLITE_CANTOPEN', 'HRANA_PROTO_ERROR', 'URL_INVALID', 'URL_PARAM_NOT_SUPPORTED']);
-            const code = error && typeof error === 'object' && known.has(error.code) ? error.code : 'DATABASE_PROBE_FAILED';
-            const status = error && typeof error === 'object' && typeof error.status === 'number' ? error.status : null;
-            console.error(JSON.stringify({ event: 'database.probe_failed', stage, code, status }));
-            process.exitCode = 1;
-          } finally { client?.close(); }
-          JS
-      - name: Apply existing atomic migrations with sanitized diagnostics
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          node --conditions=react-server --import=tsx --input-type=module <<'JS'
-          import { createClient } from '@libsql/client';
-          import { migrate } from './src/lib/db/schema.ts';
-          const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
-          try {
-            const result = await migrate(client);
-            console.info(JSON.stringify({ event: 'database.migrated', ...result }));
-          } catch (error) {
-            const messages = [error?.message, error?.cause?.message].filter((v) => typeof v === 'string').join(' ');
-            const knownCodes = new Set(['SERVER_ERROR', 'HTTP_SERVER_ERROR', 'SQLITE_AUTH', 'SQLITE_ERROR', 'SQLITE_READONLY', 'SQLITE_NOTADB', 'SQLITE_CANTOPEN', 'SQLITE_CONSTRAINT_FOREIGNKEY', 'TRANSACTION_CLOSED', 'TRANSACTION_TIMEOUT']);
-            const code = knownCodes.has(error?.code) || typeof error?.code === 'string' && /^[A-Z][A-Z_0-9]{0,59}$/.test(error.code) ? error.code : 'MIGRATION_FAILED';
-            const reason = /table.*already exists/i.test(messages) ? 'TABLE_ALREADY_EXISTS'
-              : /read.?only/i.test(messages) ? 'WRITE_PERMISSION_REQUIRED'
-              : /foreign.?key/i.test(messages) ? 'FOREIGN_KEY_INTEGRITY'
-              : /transaction.*(?:closed|rolled back)/i.test(messages) ? 'TRANSACTION_CLOSED'
-              : /syntax/i.test(messages) ? 'SQL_SYNTAX'
-              : /unsupported|not supported/i.test(messages) ? 'UNSUPPORTED_SQL'
-              : /migration.*has changed|migration history/i.test(messages) ? 'MIGRATION_HISTORY'
-              : 'UNCLASSIFIED_MIGRATION_FAILURE';
-            // This isolated diagnostic has only built-in schema SQL and an empty
-            // database. Redact credential values and URLs before reporting a
-            // bounded diagnostic; production CLI responses remain code-only.
-            const diagnostic = messages.replaceAll(process.env.TURSO_AUTH_TOKEN, '[redacted]')
-              .replaceAll(process.env.TURSO_DATABASE_URL, '[redacted]')
-              .replace(/(?:libsql|https?):\/\/[^\s"'<>]+/g, '[redacted-url]').slice(0, 300);
-            console.error(JSON.stringify({ event: 'database.migration_failed', code, reason, diagnostic }));
-            process.exitCode = 1;
-          } finally { client.close(); }
-          JS
+          }
+          NODE
