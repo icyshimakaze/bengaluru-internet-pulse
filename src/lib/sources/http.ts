@@ -38,7 +38,7 @@ export async function fetchJson(url: string, options: Options = {}): Promise<unk
       const host = new URL(url).hostname;
       const scheduled = Math.max(Date.now(), nextRequestAt.get(host) ?? 0);
       nextRequestAt.set(host, scheduled + minIntervalMs);
-      try { await delay(scheduled - Date.now(), undefined, { signal: parent ?? undefined }); }
+      try { await delay(Math.max(0, scheduled - Date.now()), undefined, { signal: parent ?? undefined }); }
       catch (error) { if (parent?.aborted) throw parent.reason; throw error; }
     }
     let backoff = 250 * 2 ** attempt;

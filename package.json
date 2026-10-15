@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "ingest": "tsx --conditions=react-server scripts/ingest.ts",
+    "audit:data": "tsx --conditions=react-server scripts/audit-data.ts",
     "db:migrate": "tsx --conditions=react-server scripts/migrate.ts",
     "db:seed": "tsx --conditions=react-server scripts/seed.ts"
   },

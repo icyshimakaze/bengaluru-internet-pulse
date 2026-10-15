@@ -35,7 +35,9 @@ export class EnrichmentRepository {
   async activeTopics(now: Date, isFixture: boolean): Promise<EnrichmentTopic[]> {
     z.date().parse(now); z.boolean().parse(isFixture);
     const rows = await this.client.execute({ sql: `SELECT t.*,e.semantic_category FROM topics t LEFT JOIN topic_enrichments e ON e.topic_id=t.id
-      WHERE t.is_fixture=? AND t.last_seen_at>=? AND t.last_seen_at<=? ORDER BY t.last_seen_at DESC,t.slug ASC LIMIT 50`,
+      WHERE t.is_fixture=? AND t.last_seen_at>=? AND t.last_seen_at<=?
+      AND EXISTS (SELECT 1 FROM items i WHERE i.topic_id=t.id AND i.enrichment_status='completed' AND i.local_relevance>=0.5)
+      ORDER BY t.last_seen_at DESC,t.slug ASC LIMIT 50`,
       args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString()] });
     return rows.rows.map((r) => enrichmentTopicSchema.parse({ id: r.id, slug: r.slug, canonical_label: r.canonical_label,
       category: r.semantic_category === null ? legacySemanticCategory[r.category as TopicRecord["category"]] : semanticCategorySchema.parse(r.semantic_category) }));
@@ -47,7 +49,7 @@ export class EnrichmentRepository {
       await verifyLease(tx, owner, now);
       const rows = await tx.execute({ sql: `SELECT * FROM items WHERE is_fixture=? AND enrichment_status IN ('pending','failed')
         AND published_at>=? AND published_at<=? AND enrichment_attempts<3 AND (enrichment_attempted_at IS NULL OR enrichment_attempted_at<=?)
-        ORDER BY enrichment_attempts ASC,published_at ASC,id ASC LIMIT ?`, args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString(),
+        ORDER BY enrichment_attempts ASC,published_at DESC,id ASC LIMIT ?`, args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString(),
         new Date(now.getTime() - 15 * 60000).toISOString(), limit] });
       const items = rows.rows.map(itemFromRow);
       if (items.length) await tx.batch(items.map((i) => ({ sql: "UPDATE items SET enrichment_attempts=enrichment_attempts+1,enrichment_attempted_at=? WHERE id=?", args: [now.toISOString(), i.id] })));
