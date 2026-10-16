@@ -40,7 +40,10 @@ export async function migrate(client: Client, migrations = loadMigrations(), now
       }
       if ((await tx.execute("PRAGMA foreign_key_check")).rows.length) throw new Error("Migration violated foreign key integrity");
       await tx.execute({ sql: "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES (?,?,?,?)", args: [migration.version, migration.name, checksum, now.toISOString()] });
-      await tx.execute(`PRAGMA user_version = ${migration.version}`);
+      // Turso's remote SQL API rejects header pragmas such as user_version.
+      // The checksummed ledger is authoritative on every backend; keep this
+      // SQLite file-header marker only for local databases.
+      if (client.protocol === "file") await tx.execute(`PRAGMA user_version = ${migration.version}`);
       await tx.commit(); applied.push(migration.version);
     } finally { tx.close(); }
   }

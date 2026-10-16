@@ -49,6 +49,73 @@ describe("genuine deterministic fallback normalization", () => {
     const items = await provider.enrich([signal("Bengaluru metro delays Whitefield"), signal("Bangalore metro delayed in Whitefield", "b")], [], context);
     expect(items[0]?.new_topic).toEqual(items[1]?.new_topic);
   });
+  it.each([
+    ["Bengaluru Purple Line metro services disrupted by a signalling fault", "Signal failure delays BMRCL Purple Line trains in Bangalore"],
+    ["BWSSB water supply interrupted in Whitefield", "No water in Whitefield Bengaluru after supply cut"],
+    ["MIT Bengaluru Inaugurates Quantum-Hub@MAHE", "Manipal Institute of Technology unveils Quantum-Hub@MAHE, a 25-qubit facility in Bengaluru"],
+    ["Bengaluru startup Scimplify raised $25 million from Hitachi Ventures", "The Bengaluru company secures funding for specialty chemicals. #Scimplify #AI #SupplyChain"],
+  ])("keeps differently worded event headlines together: %s", async (a, b) => {
+    const first = await provider.enrich([signal(a)], [], context);
+    const second = await provider.enrich([signal(b, "b")], [{ id: "canonical", canonical_label: first[0]!.canonical_label, slug: first[0]!.slug, category: first[0]!.category }], context);
+    expect(second[0]!.existing_topic_id).toBe("canonical");
+    const batch = await provider.enrich([signal(a), signal(b, "b")], [], context);
+    expect(batch[0]!.slug).toBe(batch[1]!.slug);
+  });
+  it("makes anchored canonical proposals stable when input order changes", async () => {
+    const a = signal("Bengaluru Purple Line metro service suspended"), b = signal("BMRCL halts Purple Line trains in Bangalore", "b");
+    const first = await provider.enrich([a, b], [], context), reversed = await provider.enrich([b, a], [], context);
+    expect(first.map((item) => item.slug)).toEqual(reversed.map((item) => item.slug));
+  });
+  it.each([
+    ["Bengaluru Purple Line metro delay", "Bengaluru Green Line metro delay"],
+    ["Bengaluru Purple Line signal failure delays", "Bengaluru Purple Line power failure delays"],
+    ["Bengaluru Purple Line metro delay 14 October", "Bengaluru Purple Line metro delay 15 October"],
+    ["Bengaluru startup Scimplify raised $25 million", "Bengaluru startup Scimplify raised $30 million"],
+    ["Bengaluru startup Scimplify raised $25 million", "Bengaluru startup Othercompany raised $25 million"],
+  ])("keeps distinct event anchors separate: %s", async (a, b) => {
+    const first = await provider.enrich([signal(a)], [], context);
+    const second = await provider.enrich([signal(b, "b")], [{ id: "first", canonical_label: first[0]!.canonical_label, slug: first[0]!.slug, category: first[0]!.category }], context);
+    expect(second[0]!.existing_topic_id).toBeNull();
+    expect(second[0]!.slug).not.toBe(first[0]!.slug);
+  });
+  it.each([
+    ["KOKO Bangalore Curated Menu Food event 📍 Old Airport Road, Bangalore", "food"],
+    ["Bollywood Friday Music event 📍 Varthur Main Road, Whitefield, Bangalore", "events"],
+    ["Bollywood Mixtape Arena Music event 📍 Indiranagar Bangalore 🏠 By PEEPAL TREE DEVELOPERS", "events"],
+    ["Pizza Making - A Hands-On Cookalong Social event 📍 BEL Road, Bangalore", "food"],
+  ])("classifies the activity without address or organizer leakage: %s", (text, expected) => {
+    expect(classifyCategory(text)).toBe(expected);
+  });
+  it("rejects URL-only city/place mentions and ambiguous places outside Bengaluru", () => {
+    expect(detectBengaluru("Interesting article https://example.org/bengaluru/whitefield")).toBe(false);
+    expect(detectBengaluru("Traffic on MG Road in Gurugram")).toBe(false);
+    expect(detectBengaluru("Rain in Whitefield Manchester")).toBe(false);
+  });
+  it("uses supplied local canonical evidence for a distinctive named event without a repeated city word", async () => {
+    const a = signal("MIT Bengaluru Inaugurates Quantum-Hub@MAHE");
+    const b = signal("Manipal Institute of Technology unveils Quantum-Hub@MAHE, a 25-qubit facility", "b");
+    const results = await provider.enrich([a, b], [], context);
+    expect(results.map((item) => item.local_relevance)).toEqual([1, 1]);
+    expect(results[0]!.slug).toBe(results[1]!.slug);
+    const reversed = await provider.enrich([b, a], [], context);
+    expect(reversed.map((item) => item.slug)).toEqual(results.map((item) => item.slug));
+    const foreign = await provider.enrich([signal(b.title + " in Mumbai")], [{ id: "local", canonical_label: results[0]!.canonical_label, slug: results[0]!.slug, category: results[0]!.category }], context);
+    expect(foreign[0]!.local_relevance).toBe(0);
+  });
+  it("keeps a funding event stable when a headline without its amount arrives first in the batch", async () => {
+    const a = signal("Bengaluru startup Scimplify raised $25 million"), b = signal("The Bengaluru company secures funding. #Scimplify", "b");
+    const forward = await provider.enrich([a, b], [], context), reversed = await provider.enrich([b, a], [], context);
+    expect(forward.map((item) => item.slug)).toEqual(reversed.map((item) => item.slug));
+  });
+  it("keeps different vacancies and seniority separate even when their truncated labels are nearly identical", async () => {
+    const a = "Custom Software Engineering Lead - Bengaluru, BDC14A Job educativ.net/jobs/job/66895...";
+    const b = "Custom Software Engineering Lead - Bengaluru, BDC14A Job educativ.net/jobs/job/66940...";
+    const items = await provider.enrich([signal(a), signal(b, "b")], [], context);
+    expect(items[0]!.canonical_label).not.toBe(items[1]!.canonical_label);
+    expect(items[0]!.canonical_label).toContain("66895");
+    expect(topicSimilarity(a, b)).toBe(0);
+    expect(topicSimilarity("Business Transformation Manager Job 66951", "Business Transformation Senior Manager Job 66951")).toBe(0);
+  });
   it("does not infer a named place from an author's profile, URL, partial match or multiple areas", async () => {
     const inputs = [signal("Bengaluru metro"), signal("Bengaluru Whitefieldish metro", "b"), signal("Bengaluru metro Whitefield Hebbal", "c")];
     const items = await provider.enrich(inputs, [], context);

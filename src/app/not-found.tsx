@@ -1,3 +1,2 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-export default function NotFound() { return <section className="empty-state page-empty"><span className="eyebrow">404 / outside the pulse</span><h1>This topic isn&apos;t active.</h1><p>It may have cooled out of the current window, or the link may be incorrect.</p><Link href="/" className="text-link"><ArrowLeft size={14} aria-hidden="true" />Return to the pulse</Link></section>; }
+export default function NotFound() { return <section className="topic-recovery"><span className="editorial-eyebrow">404 / PAGE NOT FOUND</span><h1>This page is outside the pulse.</h1><p>The address may be incorrect or the page may no longer be available.</p><Link href="/" className="editorial-link">← Return to the pulse</Link></section>; }

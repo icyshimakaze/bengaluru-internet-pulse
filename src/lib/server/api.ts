@@ -5,7 +5,7 @@ import { topicListQuerySchema } from "@/lib/domain/read-models";
 
 export const querySchema = topicListQuerySchema;
 export function parseParameters<T extends z.ZodType>(request: Request | undefined, schema: T) {
-  const parameters = new URL(request?.url ?? "http://localhost/").searchParams;
+  const parameters = request ? new URL(request.url).searchParams : new URLSearchParams();
   for (const key of parameters.keys()) if (parameters.getAll(key).length !== 1) return { success: false as const };
   return schema.safeParse(Object.fromEntries(parameters));
 }

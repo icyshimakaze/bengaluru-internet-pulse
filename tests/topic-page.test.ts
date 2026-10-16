@@ -16,6 +16,12 @@ const props = (slug = "namma-metro") => ({ params: Promise.resolve({ slug }) });
 const fixture = () => projectTopic(demoReadState(FIXTURE_NOW, "namma-metro"), "namma-metro", FIXTURE_NOW)!;
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(readTopic).mockResolvedValue(fixture()); });
 describe("topic brief rendering boundaries", () => {
+  it("gives each topic its own canonical and share summary without presenting fixtures as live evidence", async () => {
+    const meta = await generateMetadata(props());
+    expect(String(meta.alternates?.canonical)).toBe("https://bengaluru-internet-pulse.vercel.app/topic/namma-metro");
+    expect(meta.description).toContain("Fictional demo evidence.");
+    expect(meta.openGraph).toMatchObject({ title: "Namma Metro | Bengaluru Pulse", description: meta.description });
+  });
   it("renders stored metrics and original links with no full source content", async () => {
     const data = fixture();
     data.sourceEvidence[0]!.excerpt = "FULL_CONTENT_SENTINEL";

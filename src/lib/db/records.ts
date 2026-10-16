@@ -18,8 +18,8 @@ export function legacyLifecycle(value: z.infer<typeof lifecycleSchema>): z.infer
 }
 export const enrichmentStatusSchema = z.enum(["pending", "completed", "irrelevant", "failed"]);
 export const itemFieldsSchema = z.object({
-  id, source: sourceSchema, sourceId: z.string().min(1), canonicalUrl: httpUrlSchema, originalUrl: httpUrlSchema,
-  title: z.string().min(3).max(300), excerpt: z.string().min(3).max(4000), domain: z.string().min(1),
+  id, source: sourceSchema, sourceId: z.string().min(1).max(2048), canonicalUrl: httpUrlSchema, originalUrl: httpUrlSchema,
+  title: z.string().min(3).max(300), excerpt: z.string().min(3).max(4000), domain: z.string().min(1).max(253),
   publishedAt: timestamp, collectedAt: timestamp, contentFingerprint: z.string().min(1),
   topicId: id.nullable(), category: categorySchema.nullable(), neighborhood: neighborhoodSchema.nullable(),
   localRelevance: factor, enrichmentStatus: enrichmentStatusSchema, timeKind: z.enum(["published", "discovered"]),

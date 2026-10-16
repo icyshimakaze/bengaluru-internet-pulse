@@ -52,7 +52,24 @@ Numbered migrations and validated repository operations live in `src/lib/db`. `n
 
 ## Deployment
 
-Import this repository into Vercel as a Next.js project. A demo deployment needs no secrets. A persistent live deployment needs a **libSQL-compatible Turso database**, `APP_DATA_MODE=live`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Vercel's encrypted environment settings. Never use a local file database on Vercel. `CRON_SECRET` is needed only if an operator uses the optional authenticated HTTP ingestion endpoint.
+Import this repository into Vercel as a Next.js project. The live web deployment requires exactly two user-configured environment variables in Vercel's encrypted Production settings:
+
+| Variable | Value |
+| --- | --- |
+| `TURSO_DATABASE_URL` | The remote `libsql://...` or `https://...` Turso URL |
+| `TURSO_AUTH_TOKEN` | The database token used for server-side reads |
+
+Vercel's platform-provided `VERCEL` flag or a configured database defaults the application to **live** mode. `APP_DATA_MODE` is optional; set it to `demo` only for an explicitly fictional demo deployment. Local development without configuration still defaults to demo. Never use a local file database on Vercel or prefix database credentials with `NEXT_PUBLIC_`.
+
+Vercel serves Next.js pages and read APIs from processed Turso data. Do not configure `XKIRO_API_KEY`, `OPENAI_API_KEY`, `ENRICHMENT_PROVIDER`, `XKIRO_MODEL`, `OPENAI_MODEL`, `AI_BATCH_SIZE`, or `MAX_AI_ITEMS_PER_RUN` there. All AI/provider/source settings belong to the GitHub Actions ingestion worker. Web validation in `src/lib/server/env.ts` ignores worker settings entirely; `src/lib/server/ingestion-env.ts` validates them only when ingestion/enrichment is explicitly invoked. Production builds perform no collection, enrichment or database queries.
+
+Run the GitHub Actions ingestion workflow against the same database to apply migrations and publish the first snapshot. An initialized database with no observations shows **Waiting for a pulse**, with no fictional evidence or fabricated collection time. `/api/health` reports the application and database separately: an empty database reports database `ok` and HTTP 503 until a usable collection exists; connection failures return a controlled HTTP 503 with database `unavailable`, and the page displays the unavailable notice without exposing diagnostics or credentials.
+
+For an explicit SEO origin, set optional `SITE_URL=https://bengaluru-internet-pulse.vercel.app` in Vercel Production. It takes precedence over automatic `VERCEL_PROJECT_PRODUCTION_URL` and the project's production-domain fallback. `SITE_URL` must be a public HTTPS origin without credentials, a path, query or fragment; localhost/private development origins are rejected. Request headers and preview URLs never determine canonicals.
+
+Home, methodology and topic pages have titles, descriptions, canonical URLs, Open Graph and Twitter cards. Favicon and Apple touch icons are local assets. `/robots.txt` and meta robots prevent indexing demo/preview/development pages; live production allows public pages and blocks `/api/`. `/sitemap.xml` contains only the stable home/methodology pages, without database or ingestion calls. The share image is a local static PNG with no rendering service. Remote database requests have an eight-second deadline, and read caches are isolated by database identity. See [First-deployment audit](docs/production-audit.md).
+
+Turso schema versions are tracked by the checksummed `schema_migrations` ledger. Remote migrations omit `PRAGMA user_version` writes because Turso rejects them; local SQLite retains the file-header marker. Migration SQL files and their checksums are unchanged.
 
 Production ingestion runs through [GitHub Actions](.github/workflows/ingest.yml) at `17,47 * * * *` UTC and supports **Actions → Ingest public signals → Run workflow**. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as GitHub repository Actions secrets. Until both exist, scheduled runs clearly report **not configured** and skip ingestion before dependency installation; they never count as fresh collection. Normal manual runs with missing secrets and all actual database errors still fail visibly. Use the optional **check_configuration** dispatch to inspect database-secret presence without collection. The intended production provider is **xKiro**, selected through `ENRICHMENT_PROVIDER=xkiro`, with `XKIRO_API_KEY` as a Secret and `XKIRO_MODEL` as a vendor-prefixed model Variable. OpenAI is retained as an optional provider. Workflow concurrency and the database lease prevent overlap. Structured source counts, selected/actual enrichment providers, fallback counts, backlog and retention appear in logs and the run summary. There is no Vercel cron configuration or scheduling dependency. See [Scheduled ingestion](docs/scheduled-ingestion.md).
 

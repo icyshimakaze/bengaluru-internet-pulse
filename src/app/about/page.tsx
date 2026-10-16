@@ -1,13 +1,61 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Methodology & sources" };
-export default function AboutPage() { return <article className="about-page"><Link href="/" className="back-link"><ArrowLeft size={14} aria-hidden="true" /> Back to the pulse</Link><div className="eyebrow">Methodology / v2</div><h1>A pulse, with provenance.</h1><p className="about-lead">What is suddenly getting attention in Bengaluru? We measure changes in public conversation, then show the evidence behind them.</p>
-  <section><h2>Momentum comes first</h2><p>A topic with eight recent signals after one baseline signal, corroborated across sources, can outrank a familiar topic with 100 signals in each period. Scores describe observed acceleration, not editorial importance, audience size or factual truth.</p><p>We compare the last two hours with the preceding two hours. Topics need at least two distinct recent items to enter the active ranking. The activity chart shows hourly observed items over 24 hours.</p></section>
-  <section id="sources"><h2>Three public windows into the city</h2><div className="about-source"><h3>GDELT</h3><p>Public article discovery. We keep original links and use GDELT&apos;s discovery timestamp; publication times and syndication can differ.</p><a href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">DOC 2.0 documentation <ArrowUpRight size={13} /></a></div><div className="about-source"><h3>Bluesky</h3><p>Public posts from AppView search. Search is sampled, may be incomplete, and can be unavailable. A mention of a place does not reveal an author&apos;s location.</p><a href="https://docs.bsky.app/docs/advanced-guides/api-directory" target="_blank" rel="noopener noreferrer">Public API directory <ArrowUpRight size={13} /></a></div><div className="about-source"><h3>Hacker News</h3><p>Bengaluru-related stories via Algolia. This adds a technical community&apos;s perspective, with a small and selective audience.</p><a href="https://hn.algolia.com/api" target="_blank" rel="noopener noreferrer">Algolia search API <ArrowUpRight size={13} /></a></div><p>Reddit is not part of this version. We do not claim to cover the entire internet, private groups or all languages.</p></section>
-  <section id="scoring"><h2>A score you can inspect</h2><p>After validation, normalization, URL and content deduplication, observations are grouped into canonical topics. Only then does the deterministic engine calculate a Pulse Score.</p><table className="methodology-table"><caption className="sr-only">Pulse Score weights</caption><thead><tr><th scope="col">Input</th><th scope="col">Weight</th><th scope="col">Measures</th></tr></thead><tbody><tr><td>Velocity</td><td>40%</td><td>Logarithmic growth ratio, moderated by evidence</td></tr><tr><td>Volume</td><td>25%</td><td>Recent distinct items, logarithmically capped at 20</td></tr><tr><td>Source diversity</td><td>20%</td><td>Distinct current providers out of all three</td></tr><tr><td>Recency</td><td>15%</td><td>Exponential decay since the newest observation</td></tr></tbody></table><p>Each input is bounded from zero to one. The weighted sum is multiplied by 100 and rounded. Ties resolve by velocity, then topic slug. A missing source never reduces the diversity denominator. Low-volume one-source topics are capped at 35; any one-source topic is capped at 55.</p><p>The growth ratio is (current signals + 1) / (previous signals + 1). A topic without a baseline has velocity capped at 0.65. Displayed two-hour change uses a minimum baseline of three and an upper bound of 300%; no previous signals is labeled &ldquo;No baseline.&rdquo; Exact counts remain visible.</p><p>Confidence is separate from Pulse Score. It measures evidence volume, independent provider diversity, provider balance and deterministic cluster consistency. It describes sampled corroboration and grouping quality, not factual truth.</p><p>Lifecycle progresses through NEW, EMERGING, RISING, HOT, STABLE and COOLING using fixed thresholds. HOT requires at least six signals, two providers, a score of 75, confidence of 0.65, growth of 1.5 times and evidence within 30 minutes. Falling activity or an expired current window is COOLING. Every completed ingestion stores versioned scores and counts, including topics below the ranking threshold.</p></section>
-  <section><h2>AI has a bounded role</h2><p>Optional AI can match semantically equivalent topics, classify a category, identify an explicit neighborhood mention and describe the observed discussion. Collected text is untrusted data. Strictly validated output supplies topic membership; numeric scoring, trend confidence, lifecycle and final ranking remain deterministic.</p><p>Topic matching supports OpenAI, xKiro and a local heuristic. API failures use only the heuristic, which normalizes text, extracts explicit entities and compares topic keywords. It can miss context or split paraphrases and does not claim model-level semantic accuracy. Each run records which provider actually processed the signals. If local validation also fails, the signals remain pending and excluded from scores.</p></section>
-  <section id="locations"><h2>Places mentioned, not people located</h2><p>The map aggregates explicit neighborhood names in current topic evidence. Coordinates mark neighborhood centers, not verified incidents. A citywide topic without a neighborhood mention is omitted from the map. The accompanying list remains usable if external map tiles fail to load.</p></section>
-  <section id="live"><h2>Demo and live are explicit</h2><p>The default demonstration uses fictional, reproducible fixtures. It runs the real ranking engine and displays a persistent demo label. No fixture item is presented as a live source report.</p><p>Live mode reads persisted public observations from libSQL. Scheduled ingestion fetches all sources independently, rejects invalid or future timestamps and deduplicates repeated polls. Source failures are visible. Snapshots older than 90 minutes are marked stale, and topic rankings age against the current time.</p><p>Collection is scheduled twice an hour through GitHub Actions and persists to remote Turso storage. Scheduler delays or source failures can reduce freshness; the dashboard shows the actual collection time and stale or missing data honestly.</p></section>
-  <section><h2>Limits we keep visible</h2><p>Search result caps, indexing delays, language bias, coordinated posting, broad topic matching and sparse neighborhoods all affect the picture. URL and normalized-text deduplication catches exact syndication, not every paraphrase. A sudden burst can reflect confusion or disagreement. Always follow the original evidence before drawing conclusions.</p><p>Read endpoints expose the same scores, source statuses and provenance shown here: <code>/api/pulse</code>, <code>/api/topics</code>, <code>/api/topics/[slug]</code>, <code>/api/hotspots</code> and <code>/api/health</code>.</p></section>
-  </article>; }
+import { pageMetadata } from "@/lib/server/metadata";
+
+export const metadata: Metadata = { title: "Methodology & sources", ...pageMetadata("Methodology & sources | Bengaluru Pulse",
+  "How Bengaluru Pulse samples public signals, measures momentum, preserves source evidence and explains uncertainty.", "/about") };
+
+export default function AboutPage() {
+  return <article className="about-page">
+    <Link href="/" className="back-link">← Back to the pulse</Link>
+    <div className="eyebrow">Methodology / v2</div>
+    <h1>Momentum, with evidence.</h1>
+    <p className="about-lead">What is gaining attention across Bengaluru? We measure changes in public conversation and keep the evidence visible.</p>
+
+    <section><h2>Momentum comes first</h2>
+      <p>A topic with eight recent signals after one baseline signal, corroborated across sources, can outrank a familiar topic with 100 signals in each period. Pulse Score measures observed momentum, rather than audience size, importance or factual truth.</p>
+      <p>We compare the latest two hours with the preceding two hours. Topics need at least two distinct recent items to enter the ranking. Changing the activity window or source filter selects evidence; it does not change the scoring equation.</p>
+    </section>
+
+    <section id="sources"><h2>Three public windows into the city</h2>
+      <div className="about-source"><h3>GDELT</h3><p>Public article discovery. Links lead to original articles; timestamps mark discovery by GDELT, which can differ from publication.</p><a href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">DOC 2.0 documentation ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
+      <div className="about-source"><h3>Bluesky</h3><p>Public posts from AppView search. Results are sampled and can be incomplete or unavailable. Mentioning a place does not locate the author.</p><a href="https://docs.bsky.app/docs/advanced-guides/api-directory" target="_blank" rel="noopener noreferrer">Public API directory ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
+      <div className="about-source"><h3>Hacker News</h3><p>Bengaluru-related stories via Algolia. A technical community&apos;s perspective, with a small and selective audience.</p><a href="https://hn.algolia.com/api" target="_blank" rel="noopener noreferrer">Algolia search API ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
+      <p>Public search is a sample, not a census. Private groups and unsampled conversations are outside this view.</p>
+    </section>
+
+    <section id="scoring"><h2>A score you can inspect</h2>
+      <p>Signals are validated, deduplicated and grouped into topics before a deterministic engine calculates each score. Repeated polling never counts as new activity.</p>
+      <table className="methodology-table"><caption className="sr-only">Pulse Score weights</caption><thead><tr><th scope="col">Input</th><th scope="col">Weight</th><th scope="col">Measures</th></tr></thead><tbody>
+        <tr><td>Velocity</td><td>40%</td><td>Growth between successive two-hour windows</td></tr>
+        <tr><td>Volume</td><td>25%</td><td>Distinct recent signals</td></tr>
+        <tr><td>Source diversity</td><td>20%</td><td>Contributing providers, out of three</td></tr>
+        <tr><td>Recency</td><td>15%</td><td>How recently the latest signal appeared</td></tr>
+      </tbody></table>
+      <p>Confidence is separate from Pulse Score. It describes the amount, balance and consistency of sampled evidence, not whether a claim is true. A missing source stays missing; it never makes the remaining coverage look stronger.</p>
+      <details className="method-detail"><summary>Equations, safeguards & lifecycle thresholds</summary>
+        <p>Each input is bounded from zero to one. The weighted sum is multiplied by 100 and rounded. Volume uses a logarithmic scale capped at 20 signals; recency decays exponentially. Ties resolve by velocity, then topic slug. One-source topics are capped at 55, or 35 when evidence is sparse.</p>
+        <p>The growth ratio is (current signals + 1) / (previous signals + 1). Velocity is logarithmic and moderated by evidence volume. Without a baseline, velocity is capped at 0.65. Displayed two-hour change uses a minimum baseline of three and an upper bound of 300%; no previous signals is labeled &ldquo;No baseline.&rdquo; Exact counts remain available.</p>
+        <p>Lifecycle uses fixed thresholds for NEW, EMERGING, RISING, HOT, STABLE and COOLING. HOT requires six signals, two providers, a score of 75, confidence of 0.65, growth of 1.5 times and evidence within 30 minutes. Falling activity or an expired current window is COOLING. Stages may recur or regress; missing milestones are never inferred.</p>
+        <p>Completed collections save versioned scores and counts, including topics below the ranking threshold. Snapshots are retained for 30 days; charts show at most 96 records. Archived v1 scores remain separate from current v2 scores.</p>
+      </details>
+    </section>
+
+    <section><h2>AI groups. The engine scores.</h2>
+      <p>AI may match equivalent topics, classify a category, extract explicit place mentions and describe the evidence. It never assigns scores, confidence, lifecycle or rank. Topic matching supports OpenAI, xKiro and a local heuristic. API failures fall back only to the heuristic, and actual processing provenance is recorded. Invalid results remain pending and outside scores.</p>
+    </section>
+
+    <section id="locations"><h2>Places mentioned, not people located</h2>
+      <p>The map uses explicit neighborhood mentions. Coordinates mark neighborhood centers, not verified incident locations. Citywide and unknown locations stay off the map. The neighborhood list and geographic diagram work even when street map tiles are unavailable.</p>
+    </section>
+
+    <section id="live"><h2>Freshness stays visible</h2>
+      <p>LIVE requires an actual successful collection within 45 minutes and a fresh, readable snapshot. Collection is scheduled twice an hour; delays and source outages can reduce coverage. Snapshots older than 90 minutes are stale, and rankings age against the current time. Public page reads never trigger collection.</p>
+      <p>DEMO uses fictional, reproducible evidence with the real scoring engine. It is always labeled and never substitutes for missing live data. Original timestamps, source links, coverage gaps and failed reads remain visible.</p>
+    </section>
+
+    <section><h2>Limits of the picture</h2>
+      <p>Search caps, indexing delays, language bias, coordinated posts and sparse local evidence affect coverage. Deduplication catches repeated links and matching text, but not every paraphrase. A burst can reflect confusion or disagreement. Follow the original evidence before drawing conclusions.</p>
+    </section>
+  </article>;
+}

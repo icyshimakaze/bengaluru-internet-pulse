@@ -5,7 +5,7 @@ import { topicSchema, pulseSchema, storedPulseSchema, type Topic, type Observati
 import { computeTrends, evaluateTopics, deduplicateEvidence, computeHotspots, HOUR } from "@/lib/trends/engine";
 import { upgradeLegacyPulse } from "@/lib/trends/compatibility";
 import { topicSnapshot } from "@/lib/trends/snapshots";
-import { DataRepository, DAY, ITEM_RETENTION_DAYS, SNAPSHOT_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
+import { DataRepository, DAY, ITEM_RETENTION_DAYS, retentionStatements, writeTransaction } from "./data-repository";
 import { itemRecordSchema, topicRecordSchema, ingestionRunSchema, legacyLifecycle, type ItemRecord, type TopicRecord, type IngestionRun } from "./records";
 import { itemFromRow, topicFromRow, runFromRow, toDomainTopic, toObservations, fromSignal, itemInsert, topicInsert, snapshotInsert } from "./mapping";
 import { EnrichmentRepository, applyEnrichments } from "./enrichment-repository";
@@ -85,11 +85,13 @@ export class Repository extends DataRepository {
       const inserted = inserts.length ? (await tx.batch(inserts)).reduce((n, r) => n + r.rows.length, 0) : 0;
       await applyEnrichments(tx, options.enrichments ?? [], [...bySlug.values()], isFixture, captured);
       const rows = await tx.batch([
-        { sql: "SELECT * FROM topics WHERE is_fixture=? ORDER BY slug", args: [Number(isFixture)] },
+        { sql: `SELECT t.*,(SELECT s.count_24h FROM topic_snapshots s WHERE s.topic_id=t.id AND s.algorithm_version='v2'
+          ORDER BY s.captured_at DESC LIMIT 1) AS last_count_24h FROM topics t WHERE t.is_fixture=? ORDER BY t.slug`, args: [Number(isFixture)] },
         { sql: "SELECT * FROM items WHERE is_fixture=? AND published_at>=? AND published_at<=? ORDER BY published_at,id",
           args: [Number(isFixture), new Date(captured.getTime() - ITEM_RETENTION_DAYS * DAY).toISOString(), capturedAt] },
       ]);
       const storedTopics = (rows[0]?.rows ?? []).map(topicFromRow);
+      const lastCounts = new Map((rows[0]?.rows ?? []).map((r) => [String(r.id), r.last_count_24h]));
       const storedItems = (rows[1]?.rows ?? []).map(itemFromRow);
       const evidence = deduplicateEvidence(toObservations(storedItems, storedTopics), captured);
       const trends = computeTrends(storedTopics.map(toDomainTopic), evidence, captured);
@@ -132,7 +134,9 @@ export class Repository extends DataRepository {
         statements.push({ sql: "UPDATE topics SET first_seen_at=min(first_seen_at,?),last_seen_at=max(last_seen_at,?),neighborhood=?,lifecycle=?,lifecycle_v2=?,pulse_score=?,confidence=? WHERE id=?",
           args: [times[0] ?? t.firstSeenAt, times.at(-1) ?? t.lastSeenAt, neighborhood, legacyLifecycle(state), state, metric.score, metric.confidence, t.id] });
         const topicEvidence = evidence.filter((o) => o.topicSlug === t.slug);
-        if (Date.parse(t.lastSeenAt) >= captured.getTime() - SNAPSHOT_RETENTION_DAYS * DAY || topicEvidence.length)
+        // Record the final zero-evidence transition once, rather than writing
+        // another identical archive row every poll for the next thirty days.
+        if (metric.count24h > 0 || lastCounts.get(t.id) !== 0)
           statements.push(snapshotInsert(topicSnapshot(t.id, topicEvidence, captured, metric, batchId, toDomainTopic(t))));
       }
       const completedRuns: IngestionRun[] = [];

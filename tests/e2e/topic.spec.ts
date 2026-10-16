@@ -11,7 +11,7 @@ test("topic brief grounds its narrative in evidence and exposes snapshot history
   await expect(page.locator(".topic-category-line")).toHaveText("Traffic·Whitefield");
   await expect(page.locator(".topic-pulse-value")).toHaveText(String(data.pulseScore));
   await expect(page.locator(".why-explanation")).toContainText("from " + data.topic.previous2h + " to " + data.topic.current2h);
-  await expect(page.locator(".why-evidence-strip")).toContainText("Independent providers");
+  await expect(page.locator(".why-source-basis")).toContainText("GDELT · Bluesky · Hacker News");
   await expect(page.locator(".topic-where")).toContainText(data.locationEvidence.mentionCount + " explicit mentions");
   await expect(page.locator(".snapshot-count")).toContainText("49 SNAPSHOTS · V2");
   await expect(page.locator(".lifecycle-timeline > li")).toHaveCount(4);

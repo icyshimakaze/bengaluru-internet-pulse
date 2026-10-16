@@ -2,10 +2,14 @@
 
 Only public APIs are used. Reddit is deliberately excluded.
 
+All source metadata is untrusted. The shared URL schema applies to collection, persisted records and public responses: HTTP(S) only, maximum 2,048 characters, no credentials/control characters/backslashes, no IP literals or local hostnames. Article links are not fetched by the application. Source HTTP requests reject redirects and retain bounded response streams/deadlines; provider endpoints are fixed in the adapters. This is lexical link validation, not DNS or destination-content certification.
+
+Near-copy detection uses a sorted-title prefix index partitioned by publication day and numeric facts. It narrows candidate comparisons without changing the final 90% title/excerpt overlap and 24-hour rules. Collection and deterministic scoring share this index; identical or highly similar adversarial inputs can still produce large candidate buckets.
+
 | Source | Public endpoint | Signal | Limitations |
 | --- | --- | --- | --- |
 | GDELT DOC 2.0 | `https://api.gdeltproject.org/api/v2/doc/doc` | Bengaluru-related article discovery | Indexing time differs from publication time; syndication and English coverage bias; discovery counts are not readership. |
-| Bluesky public AppView | `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts` | Public posts mentioning Bengaluru/Bangalore | Search is sampled and service availability varies; no claim of full firehose coverage or precise user location. |
+| Bluesky public AppView | `https://api.bsky.app/xrpc/app.bsky.feed.searchPosts` | Public posts mentioning Bengaluru/Bangalore | Search is sampled and service availability varies; no claim of full firehose coverage or precise user location. |
 | Hacker News Algolia | `https://hn.algolia.com/api/v1/search_by_date` | Bengaluru-related stories | Small technical audience; indexed stories are not representative of the city. |
 
 Adapters request a bounded recent window, validate each record, reject invalid/future dates, strip markup and preserve original URLs. Bengaluru relevance is text-based; neighborhood tags describe mentions, not a person's physical location. GDELT's `seendate` is explicitly treated as discovery time.
@@ -19,6 +23,8 @@ Every adapter returns `NormalizedSignal`: `source`, `sourceId`, original-source 
 - HN: Bengaluru and Bangalore, `search_by_date`, story-only, numeric creation-time bounds and 50 hits per search. Retain only story ID, title, optional story text, creation time and optional linked URL. Evidence links to the original HN discussion even when a story has an external link. Authors, profiles, points and comment counts are discarded.
 
 Each source has a 35-second overall deadline, including retries, request pacing and body reads. Bluesky/HN concurrency is capped at two queries each. HTTP requests have a separate configurable per-attempt timeout (default 8 seconds), two attempts, a 2 MiB decompressed response limit and cancellable exponential backoff. Retry network/timeouts, 408, 429 and 5xx; do not retry permanent client errors or invalid JSON. Respect short `Retry-After` delays; longer delays end the query instead of retrying prematurely.
+
+Bluesky search uses the official direct AppView host, `api.bsky.app`. A credential-free GitHub runner probe on 15 October 2026 returned HTTP 403 from the cached `public.api.bsky.app` search endpoint and HTTP 200 with a valid post envelope from the direct host. The [official API directory](https://github.com/bluesky-social/bsky-docs/blob/main/docs/advanced-guides/api-directory.mdx) identifies this AppView host; the [search lexicon](https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/searchPosts.json) notes that authentication requirements can differ by implementation. No account, authorization header or cookies are added. Future access failures remain visible as degraded coverage.
 
 Each query is isolated: successful results survive failed siblings. Source health is `ok`, `partial` or `error`, with raw fetched/valid/rejected counts, intra-source duplicates, query count and failed-query count. A valid empty envelope is healthy; invalid envelopes fail visibly. Structured logs identify provider, query ID, error code, retry attempt and counters, without raw posts or profiles. The pipeline remains successful as an operation when sources fail, publishing degraded/unavailable coverage and per-source run records.
 
@@ -38,7 +44,9 @@ Deduplicate by source identity, canonical URL and a versioned SHA-256 content fi
 
 An unavailable API provider falls back only to heuristic. Source text and catalog labels remain untrusted input; every result passes strict Zod/context validation. Secrets stay in ingestion/server code. Per-item and per-run actual-provider provenance distinguishes xKiro success from heuristic fallback; no OpenAI usage is claimed merely because it is supported. No provider or fallback may invent evidence or discard collected data.
 
-Timeouts, retries for network failures/408/429/5xx, maximum response size and per-source statuses protect ingestion. Invalid records are counted. A valid empty result is distinct from a failed source. URL identity strips tracking parameters and fragments; Bluesky external embeds use their linked content URL for dedupe while retaining the public post permalink as provenance. Normalized text identity removes exact syndicated duplicates across sources. Only retained, deduplicated observations contribute to diversity.
+Timeouts, retries for network failures/408/429/5xx, maximum response size and per-source statuses protect ingestion. Invalid records are counted. A valid empty result is distinct from a failed source. URL identity strips tracking parameters and fragments; Bluesky external embeds use their linked content URL for dedupe while retaining the public post permalink as provenance. Supplied linked-article titles/descriptions are retained in excerpts; article bodies are not fetched.
+
+Normalized text identity removes exact syndicated duplicates across sources. Conservative near-copy matching additionally requires linked article content, at least seven substantive title and excerpt tokens, at least 90% token coverage on each side, identical numeric tokens and timestamps within 24 hours. Independent paraphrases and distinct commentary remain separate evidence. This check runs before persistence and again over retained scoring evidence. Only retained, deduplicated observations contribute to diversity.
 
 The dashboard links to public source pages rather than republishing complete articles. Counts describe observed distinct items, never audience size. Fixtures are fictional and marked as demo; they are never merged into live data.
 

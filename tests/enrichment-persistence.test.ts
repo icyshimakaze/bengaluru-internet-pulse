@@ -83,12 +83,22 @@ describe("durable semantic enrichment queue", () => {
     const repo = testRepository(); await repo.initialize();
     for (const [slug, hours, isFixture] of [["recent-topic", 20, false], ["old-topic", 25, false], ["fixture-topic", 1, true]] as const) {
       const at = new Date(now.getTime() - hours * 3600000).toISOString();
-      await repo.createTopic({ slug, canonicalLabel: "Bengaluru metro", category: "Mobility", firstSeenAt: at, lastSeenAt: at, summary: "Public discussion", isFixture });
+      const topic = await repo.createTopic({ slug, canonicalLabel: "Bengaluru metro", category: "Mobility", firstSeenAt: at, lastSeenAt: at, summary: "Public discussion", isFixture });
+      await repo.insertItem(fromSignal(observation(`catalog-${slug}`, hours), { topicId: topic.id, category: "Mobility", localRelevance: 1, enrichmentStatus: "completed", isFixture }));
     }
     const active = await repo.enrichment.activeTopics(now, false);
     expect(active.map((t) => t.slug)).toEqual(["recent-topic"]);
     expect(active[0]).toMatchObject({ category: "traffic", canonical_label: "Bengaluru metro" });
     expect(await repo.listActiveTopics({ now })).toHaveLength(0);
+  });
+  it("claims fresh unattempted evidence before older backlog while preserving cooldown and retry limits", async () => {
+    const repo = testRepository(); await repo.initialize();
+    for (const [id, hours] of [["old-backlog", 20], ["fresh-signal", 0.1]] as const) await repo.insertItem(fromSignal(observation(id, hours)));
+    const owner = await repo.acquireLease(now);
+    const claimed = await repo.enrichment.claimPending(now, false, 1, owner!);
+    expect(claimed.map((item) => item.sourceId)).toEqual(["fresh-signal"]);
+    expect((await repo.enrichment.claimPending(now, false, 1, owner!)).map((item) => item.sourceId)).toEqual(["old-backlog"]);
+    await repo.releaseLease(owner!);
   });
   it("rejects malformed injected results before any enrichment or topic reaches the database", async () => {
     const repo = testRepository();

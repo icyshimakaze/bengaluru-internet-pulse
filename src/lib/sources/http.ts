@@ -2,7 +2,7 @@ import "server-only";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { errorCode, log } from "@/lib/server/logger";
-import { sourceSchema, type Source } from "@/lib/domain/schema";
+import { httpUrlSchema, sourceSchema, type Source } from "@/lib/domain/schema";
 
 export type TransportOptions = { timeoutMs?: number; signal?: AbortSignal; source?: Source; queryId?: string; minIntervalMs?: number };
 type Options = TransportOptions & { attempts?: number; fetcher?: typeof fetch; init?: RequestInit };
@@ -29,6 +29,7 @@ function retryDelay(value: string | null, fallback: number): number {
   return Number.isFinite(duration) ? Math.max(0, duration) : fallback;
 }
 export async function fetchJson(url: string, options: Options = {}): Promise<unknown> {
+  httpUrlSchema.parse(url);
   const { timeoutMs, attempts, source, queryId, minIntervalMs } = settings.parse(options);
   const fetcher = options.fetcher ?? fetch, init = options.init ?? {};
   const parent = options.signal ?? init.signal;
@@ -38,7 +39,7 @@ export async function fetchJson(url: string, options: Options = {}): Promise<unk
       const host = new URL(url).hostname;
       const scheduled = Math.max(Date.now(), nextRequestAt.get(host) ?? 0);
       nextRequestAt.set(host, scheduled + minIntervalMs);
-      try { await delay(scheduled - Date.now(), undefined, { signal: parent ?? undefined }); }
+      try { await delay(Math.max(0, scheduled - Date.now()), undefined, { signal: parent ?? undefined }); }
       catch (error) { if (parent?.aborted) throw parent.reason; throw error; }
     }
     let backoff = 250 * 2 ** attempt;
@@ -46,7 +47,7 @@ export async function fetchJson(url: string, options: Options = {}): Promise<unk
     try {
       const headers = new Headers(init.headers);
       headers.set("Accept", "application/json");
-      const response = await withAbort(fetcher(url, { ...init, cache: "no-store", credentials: "omit", signal, headers }), signal);
+      const response = await withAbort(fetcher(url, { ...init, redirect: "error", cache: "no-store", credentials: "omit", signal, headers }), signal);
       if (!response.ok) {
         backoff = retryDelay(response.headers.get("retry-after"), backoff);
         void response.body?.cancel().catch(() => {});

@@ -40,6 +40,8 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           CHECK_CONFIGURATION: ${{ inputs.check_configuration || 'false' }}
+          AI_BATCH_SIZE: ${{ vars.AI_BATCH_SIZE || '10' }}
+          MAX_AI_ITEMS_PER_RUN: ${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}
         run: node scripts/check-ingestion-config.mjs
       - name: Set up Node.js
         if: steps.configuration.outputs.should_ingest == 'true'

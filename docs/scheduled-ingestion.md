@@ -2,6 +2,8 @@
 
 `.github/workflows/ingest.yml` runs the existing server-only CLI on GitHub-hosted Ubuntu with Node.js 22. It supports `workflow_dispatch` and the UTC cron expression `17,47 * * * *`. The schedule is also at minutes 17 and 47 in IST. `vercel.json` contains no cron; Vercel serves the read/UI layer, and ingestion does not need a site URL.
 
+The Vercel live web deployment requires only `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`; live mode defaults from Vercel's platform flag. Keep provider keys, model/provider selection, enrichment limits and source settings in Actions. The web environment parser does not validate those worker settings. The ingestion parser runs only when the worker or optional authenticated HTTP ingestion is explicitly invoked. The workflow applies database migrations before collection, so run it against the shared database to initialize the first deployment.
+
 ## Repository configuration
 
 In GitHub **Settings → Secrets and variables → Actions**, configure repository secrets:
@@ -15,7 +17,7 @@ In GitHub **Settings → Secrets and variables → Actions**, configure reposito
 
 Database secrets are scoped to a dependency-free configuration check and the ingestion step. OpenAI/xKiro keys are passed only to ingestion and used only by the selected provider. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
 
-Before installing dependencies, `scripts/check-ingestion-config.mjs` checks whether both database secrets are nonempty. An unconfigured **scheduled** run emits a warning, explains the missing secret names in its summary, and skips all setup/collection steps. It does not claim a successful ingestion, poll sources, create an ephemeral database, or fabricate counts. Once both secrets exist, the schedule automatically starts the production pipeline. This presence check does not validate a URL, token, or connection; those failures remain visible in the production command.
+Before installing dependencies, `scripts/check-ingestion-config.mjs` checks database-secret presence and validates the nonsecret worker limits: `AI_BATCH_SIZE` must be 1–10 and `MAX_AI_ITEMS_PER_RUN` must be 1–30. An invalid limit fails visibly with its variable name and supported range, without printing values or collecting. An unconfigured **scheduled** run emits a warning, explains the missing secret names in its summary, and skips setup/collection. It never claims ingestion or freshness. This bootstrap does not validate database connectivity or provider account access; the actual worker still applies Zod validation before opening storage or collection.
 
 The intended deployment selects **xKiro** when `ENRICHMENT_PROVIDER` is absent. Both scheduled runs and the default manual `repository` selection honor the Actions Variable `ENRICHMENT_PROVIDER`. Set it to `xkiro` and set `XKIRO_MODEL` to a model your account supports, preserving its `vendor/model` prefix. `XKIRO_BASE_URL` defaults to `https://api.xkiro.com/v1` when its Variable is blank. Optional Variables: `AI_BATCH_SIZE` (default/max 10), `MAX_AI_ITEMS_PER_RUN` (default/max 30), and `ENRICHMENT_ENABLED` (default `true`).
 
@@ -28,7 +30,7 @@ gh workflow run ingest.yml --ref main -f enrichment_provider=heuristic
 gh run list --workflow ingest.yml --limit 5
 ```
 
-To check setup safely before obtaining database credentials, select **check_configuration** in the dispatch form, or run `gh workflow run ingest.yml --ref main -f check_configuration=true`. This operation checks secret presence only, always skips ingestion, and explicitly reports missing setup. The default is `false`; a normal manual production dispatch with missing credentials fails visibly.
+To check setup safely before obtaining database credentials, select **check_configuration** or run `gh workflow run ingest.yml --ref main -f check_configuration=true`. This checks secret presence and worker limits, always skips ingestion, and reports missing/invalid setup. It does not contact storage or providers. The default is `false`; a normal manual production dispatch with missing credentials fails visibly.
 
 [GitHub schedules](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) run the default branch and can be delayed; inactive public repositories may have schedules disabled. The product derives freshness from committed collection timestamps, never from the requested cron time. Manual dispatch requires the workflow file on the default branch; a run can select a branch. A configuration check or skipped unconfigured schedule never updates the application's freshness.
 
@@ -42,6 +44,8 @@ To check setup safely before obtaining database credentials, select **check_conf
 6. Emit safe committed source counts, enrichment backlog, retention counts and outcome; release the database lease and close the client.
 
 No upstream/model calls occur within publication. The deterministic engine alone controls ranking, confidence and lifecycle. Items retain approximately 14 days; topic/dashboard snapshots and completed source runs retain 30 days. Exact retention boundaries and referenced topics remain protected.
+
+The migration ledger is authoritative for both local and remote databases. Turso rejects SQL writes to `PRAGMA user_version`; those file-header updates now run only on local SQLite. All migration SQL files/checksums, transaction boundaries and historical data preservation remain unchanged. The CLI distinguishes invalid worker settings with `INVALID_INGESTION_CONFIGURATION` and allowlisted `invalidVariables` names instead of misleadingly reporting a database failure. Secret values and raw provider/database exceptions are still omitted.
 
 The fixed workflow concurrency group spans manual and scheduled runs, with `cancel-in-progress: false`. A running ingestion is not interrupted by a newer trigger. GitHub may replace an older pending run with a newer one; the latest polling job is sufficient because repeated polling is idempotent. The separate two-minute database lease also protects against concurrent local/HTTP collectors. The job has a ten-minute timeout including dependency installation; ingestion itself has a three-minute step timeout. Source collection has a 35-second total budget per provider, runs providers independently, and caps individual request timeouts at the configured eight seconds. Optional model work has a 15-second total deadline, batches up to ten items and processes at most thirty per run.
 

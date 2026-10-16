@@ -1,20 +1,20 @@
 import "server-only";
-import { z } from "zod";
-import { getEnv, type ServerEnv } from "@/lib/server/env";
+import { httpUrlSchema } from "@/lib/domain/urls";
+import { getIngestionEnv, type IngestionEnv } from "@/lib/server/ingestion-env";
 import { enrichmentProviderSchema, modelIdSchema, vendorModelIdSchema, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
 import { OpenAIEnrichmentProvider } from "./openai";
 import { XKiroEnrichmentProvider } from "./xkiro";
 import { HeuristicEnrichmentProvider } from "./heuristic";
 import { EnrichmentConfigurationError, type EnrichmentProvider } from "./types";
 
-const xKiroBaseUrlSchema = z.url().refine((value) => {
+const xKiroBaseUrlSchema = httpUrlSchema.refine((value) => {
   try {
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
   } catch { return false; }
 });
 
-export function getEnrichmentProvider(env: ServerEnv = getEnv(), override?: EnrichmentProviderName): EnrichmentProvider {
+export function getEnrichmentProvider(env: IngestionEnv = getIngestionEnv(), override?: EnrichmentProviderName): EnrichmentProvider {
   const selected = enrichmentProviderSchema.parse(override ?? env.ENRICHMENT_PROVIDER);
   if (selected === "heuristic") return new HeuristicEnrichmentProvider();
   if (selected === "openai") {

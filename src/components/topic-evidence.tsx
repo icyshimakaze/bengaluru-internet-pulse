@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import type { TopicEvidenceLink } from "@/lib/trends/topic-presentation";
-import { sourceNames, sources, type Source } from "@/lib/domain/schema";
-import { formatDate, formatTime } from "@/lib/utils";
+import { sourceNames, sources } from "@/lib/domain/source-labels";
+import type { Source } from "@/lib/domain/schema";
+import { formatDate, formatTime } from "@/lib/format";
 
 function EvidenceCard({ signal, mode }: { signal: TopicEvidenceLink; mode: "demo" | "live" }) {
   return <li className="topic-evidence-card"><div className="evidence-card-top"><span className="evidence-provider">{sourceNames[signal.source]}</span><span className="mono evidence-card-kind">{mode === "demo" ? "FICTIONAL EXAMPLE" : signal.sourceType.toUpperCase()}</span></div><h3>{signal.title}</h3><p className="evidence-card-domain">{signal.domain}</p><div className="evidence-card-bottom"><span><time dateTime={signal.publishedAt}>{formatDate(signal.publishedAt)} · {formatTime(signal.publishedAt)} IST</time><small>{signal.timeKind === "discovered" ? "Discovered by source" : "Published by source"}</small></span><a href={signal.url} target="_blank" rel="noopener noreferrer">{mode === "demo" ? "Open Example" : "Open Original"} <span aria-hidden="true">→</span><span className="sr-only">: {signal.title} (opens in a new tab)</span></a></div></li>;

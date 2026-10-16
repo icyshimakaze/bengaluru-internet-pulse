@@ -42,7 +42,7 @@ describe("public source contracts", () => {
     const urls = transport.mock.calls.map((call) => new URL(String(call[0])));
     expect(urls.map((url) => url.searchParams.get("q"))).toEqual(["Bengaluru", "Bangalore", "Namma Metro", "ಬೆಂಗಳೂರು"]);
     for (const url of urls) {
-      expect(url.origin).toBe("https://public.api.bsky.app");
+      expect(url.origin).toBe("https://api.bsky.app");
       expect(url.pathname).toBe("/xrpc/app.bsky.feed.searchPosts");
       expect(url.searchParams.get("sort")).toBe("latest");
       expect(url.searchParams.get("limit")).toBe("50");
@@ -62,6 +62,13 @@ describe("public source contracts", () => {
       expect(result.signals).toHaveLength(1);
       expect(result.signals[0]?.canonicalUrl).toBe("media" in embed ? "https://example.org/media" : "https://bsky.app/profile/did:plc:fixture/post/abc123");
     }
+  });
+  it("retains supplied article metadata needed for event identity and local relevance without changing post provenance", async () => {
+    const post = { ...fixtures.bluesky.posts[0], record: { text: "A new quantum facility", createdAt: "2026-10-06T10:00:00.000Z" },
+      embed: { external: { uri: "https://publisher.org/quantum", title: "MIT Bengaluru launches Quantum-Hub@MAHE", description: "A 25-qubit facility in Bengaluru." } } };
+    const result = await createAdapters(async () => ({ posts: [post] })).bluesky(now, 1000);
+    expect(result.signals[0]).toMatchObject({ title: "A new quantum facility", publishedAt: post.record.createdAt, timeKind: "published", url: "https://bsky.app/profile/did:plc:fixture/post/abc123" });
+    expect(result.signals[0]?.excerpt).toContain("MIT Bengaluru launches Quantum-Hub@MAHE");
   });
   it("uses both HN search_by_date queries, bounded stories and the source discussion link", async () => {
     const transport = vi.fn<Transport>().mockResolvedValue({ hits: [] });

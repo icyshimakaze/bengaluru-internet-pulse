@@ -1,4 +1,4 @@
-import { coordinates } from "@/lib/domain/schema";
+import { coordinates } from "@/lib/domain/places";
 import type { PublicHotspot } from "@/lib/domain/read-models";
 
 /** Keep unsupported/empty locations off both maps. Only curated centers determine position. */

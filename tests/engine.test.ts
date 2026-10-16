@@ -62,6 +62,14 @@ describe("production deterministic momentum v2", () => {
     expect(deduplicateEvidence([c, b, a], now)).toEqual([a]);
     expect(metric([a, b, c]).current2h).toBe(1); expect(computeTrends([topic], [a, b, c], now)).toEqual([]);
   });
+  it("does not turn syndicated near-copies into independent provider corroboration", () => {
+    const title = "Bengaluru metro transports donated organ from hospital to hospital for emergency surgery";
+    const a = { ...observation("syndication-first", 0.5, "gdelt"), title, text: title, excerpt: title };
+    const b = { ...observation("syndication-copy", 0.1, "bluesky"), title: title + " today", text: title + " today", excerpt: title + " today" };
+    const m = metric([a, b]);
+    expect(m.current2h).toBe(1); expect(m.sourceCount).toBe(1); expect(m.score).toBeLessThanOrEqual(20);
+    expect(m.latestAt).toBe(a.publishedAt);
+  });
   it("does not award perfect velocity to a new topic with no baseline", () => {
     const fresh = metric(signals(2, 0, topic.slug, true, 0.05));
     const huge = metric(signals(100, 0));

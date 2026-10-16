@@ -4,14 +4,20 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: pulse-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Validate GitHub Actions workflows
-        uses: docker://rhysd/actionlint:1.7.12
-      - uses: actions/setup-node@v4
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -36,6 +42,12 @@ jobs:
           XKIRO_API_KEY: ""
           XKIRO_BASE_URL: ""
           XKIRO_MODEL: ""
+      - name: Build the live Vercel web application with only database settings
+        run: npm run build
+        env:
+          VERCEL: "1"
+          TURSO_DATABASE_URL: "libsql://vercel-build.invalid"
+          TURSO_AUTH_TOKEN: "build-only-placeholder"
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

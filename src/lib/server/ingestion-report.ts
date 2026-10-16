@@ -1,4 +1,5 @@
 import "server-only";
+import { IngestionEnvironmentError, ingestionVariableNames } from "./ingestion-env";
 import { z } from "zod";
 import { sourceSchema, pulseSchema } from "@/lib/domain/schema";
 import type { IngestionResult } from "@/lib/pipeline/ingest";
@@ -13,7 +14,8 @@ export const ingestionReportSchema = z.object({
   sources: z.array(z.object({ source: sourceSchema, status: z.enum(["completed", "partial", "failed", "abandoned"]),
     discovered: count, inserted: count, duplicates: count, errors: count }).strict()).max(3),
   pruned: z.object({ items: count, snapshots: count, pulseSnapshots: count, ingestionRuns: count, topics: count }).strict().nullable(),
-  failureCode: z.enum(["INVALID_CLI_ARGUMENT", "REMOTE_DATABASE_REQUIRED", "INGEST_FAILED"]).nullable(),
+  failureCode: z.enum(["INVALID_CLI_ARGUMENT", "REMOTE_DATABASE_REQUIRED", "INVALID_INGESTION_CONFIGURATION", "INGEST_FAILED"]).nullable(),
+  invalidVariables: z.array(z.enum(ingestionVariableNames)).default([]),
 }).strict();
 export type IngestionReport = z.infer<typeof ingestionReportSchema>;
 
@@ -48,9 +50,11 @@ export function ingestionReport(result: IngestionResult, fixtureMode = false, no
 
 export function failedIngestionReport(error: unknown, fixtureMode = false, now = new Date()): IngestionReport {
   const message = error instanceof Error ? error.message : "";
-  const code = message === "INVALID_CLI_ARGUMENT" || message === "REMOTE_DATABASE_REQUIRED" ? message : "INGEST_FAILED";
+  const code = error instanceof IngestionEnvironmentError ? "INVALID_INGESTION_CONFIGURATION"
+    : message === "INVALID_CLI_ARGUMENT" || message === "REMOTE_DATABASE_REQUIRED" ? message : "INGEST_FAILED";
   return ingestionReportSchema.parse({ event: "cli.ingest.failed", at: now.toISOString(), status: "failed", mode: fixtureMode ? "demo" : "live",
-    coverage: null, capturedAt: null, added: null, rankedTopics: null, availableSources: null, enrichment: null, sources: [], pruned: null, failureCode: code });
+    coverage: null, capturedAt: null, added: null, rankedTopics: null, availableSources: null, enrichment: null, sources: [], pruned: null, failureCode: code,
+    invalidVariables: error instanceof IngestionEnvironmentError ? error.fields : [] });
 }
 
 export function formatIngestionSummary(input: IngestionReport): string {
@@ -58,6 +62,8 @@ export function formatIngestionSummary(input: IngestionReport): string {
   const lines = ["## Bengaluru Pulse ingestion", "", `**Outcome:** ${r.status} · **Mode:** ${r.mode} · **Coverage:** ${r.coverage ?? "not evaluated"}`,
     `**Snapshot:** ${r.capturedAt ?? (r.status === "skipped" ? "not written; another collector holds the database lease" : "not confirmed")}`,
     `**Inserted:** ${r.added ?? "unknown"} · **Ranked topics:** ${r.rankedTopics ?? "not evaluated"} · **Available sources:** ${r.availableSources ?? "not evaluated"}`, ""];
+  if (r.invalidVariables.length) lines.push(`**Invalid worker variables:** ${r.invalidVariables.map((name) => "`" + name + "`").join(", ")}.`,
+    "AI_BATCH_SIZE must be 1–10; MAX_AI_ITEMS_PER_RUN must be 1–30. Check Settings → Secrets and variables → Actions → Variables.", "");
   if (r.sources.length) lines.push("| Source | Status | Discovered | Inserted | Duplicates | Errors |", "| --- | --- | ---: | ---: | ---: | ---: |",
     ...r.sources.map((s) => `| ${s.source} | ${s.status} | ${s.discovered} | ${s.inserted} | ${s.duplicates} | ${s.errors} |`), "");
   if (r.enrichment) lines.push(`**Enrichment:** ${r.enrichment.provider} · ${r.enrichment.completed} completed · ${r.enrichment.pending} pending · ${r.enrichment.irrelevant} irrelevant (latest 24h).`,

@@ -36,6 +36,16 @@ describe("normalization and canonicalization", () => {
     const copy = normalize({ source: "gdelt", sourceId: "syndicated-copy", url: "https://different.org/story", title: a.title, text: a.text, publishedAt: a.publishedAt }, now)!;
     expect(deduplicate([copy], [{ ...a, contentHash: "legacy-hash" }])).toEqual([]);
   });
+  it("deduplicates long near-identical syndicated copies while retaining independent reports and changed facts", () => {
+    const title = "Bengaluru metro transports donated organ from hospital to hospital for emergency surgery";
+    const a = normalize({ source: "gdelt", sourceId: "a", url: "https://publisher.org/a", title, publishedAt: now.toISOString() }, now)!;
+    const copy = normalize({ source: "gdelt", sourceId: "b", url: "https://syndicator.org/b", title: title + " today", publishedAt: now.toISOString() }, now)!;
+    const independent = normalize({ source: "gdelt", sourceId: "c", url: "https://reporter.org/c", title: "Donor organ transported by Namma Metro in Bengaluru medical emergency", publishedAt: now.toISOString() }, now)!;
+    expect(deduplicate([a, copy, independent])).toHaveLength(2);
+    expect(deduplicate([copy], [a])).toEqual([]);
+    expect(deduplicate([{ ...a, title: title + " 25" }, { ...copy, title: title + " 30" }])).toHaveLength(2);
+    expect(deduplicate([a, { ...copy, excerpt: "Independent interview with doctors about the recipient and treatment during the emergency." }])).toHaveLength(2);
+  });
   it("reads old snapshots with derived normalized fields and rejects impossible dates", () => {
     const current = observation("old-shape", 1);
     const { excerpt: _excerpt, domain: _domain, sourceType: _type, ...legacy } = current;

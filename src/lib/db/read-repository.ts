@@ -18,6 +18,19 @@ const lastRun = (until: string, fixture: boolean, successful = false): InStateme
 // Dedicated read facade: no migration, model, source-fetch or mutation methods.
 export class ReadRepository {
   constructor(private readonly client: Client) {}
+  async loadHistory(now: Date, topicSlug: string, capturedAt: string, isFixture = false) {
+    const until = at(now), slug = slugSchema.parse(topicSlug), ceiling = z.iso.datetime().parse(capturedAt);
+    const fixture = z.boolean().parse(isFixture);
+    if (ceiling > until) throw new Error("FUTURE_HISTORY_CEILING");
+    // The parent read has already validated the topic and its atomic snapshot.
+    // Never attach later history to an older cached snapshot.
+    const rows = await this.client.execute({ sql: `SELECT s.* FROM topic_snapshots s JOIN topics t ON t.id=s.topic_id
+      WHERE t.slug=? AND t.is_fixture=? AND s.captured_at>=? AND s.captured_at<=?
+      ORDER BY s.captured_at DESC,s.algorithm_version DESC LIMIT 97`,
+      args: [slug, Number(fixture), new Date(now.getTime() - 30 * DAY).toISOString(), ceiling] });
+    const history = rows.rows.map(snapshotFromRow);
+    return { history: history.slice(0, 96).reverse(), historyTruncated: history.length > 96 };
+  }
   async load(now: Date, topicSlug?: string, isFixture = false) {
     const until = at(now), fixture = z.boolean().parse(isFixture), mode: Pulse["mode"] = fixture ? "demo" : "live";
     const since = new Date(now.getTime() - DAY).toISOString(), historySince = new Date(now.getTime() - 30 * DAY).toISOString();

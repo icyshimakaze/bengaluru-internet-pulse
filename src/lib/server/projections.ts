@@ -61,10 +61,10 @@ function info(state: ReadState, query: ReadQuery, now: Date) {
     capturedAt, evaluatedAt: now.toISOString(), ageSeconds, scoringWindow: "2h", queryWindow: query.window,
     stale: ageSeconds === null || ageSeconds * 1000 > STALE_MS, cacheAgeSeconds, refreshDelayed: cacheAgeSeconds > 30 });
 }
-function publicSignal(item: ItemRecord, topics: ReadState["topics"]) {
+function publicSignal(item: ItemRecord, topics: ReadonlyMap<string, ReadState["topics"][number]>) {
   return publicSignalSchema.parse({ id: item.id, source: item.source, sourceType: item.source === "gdelt" ? "news" : item.source === "bluesky" ? "social" : "tech",
     url: item.originalUrl, title: item.title, excerpt: item.excerpt.slice(0, 600), domain: item.domain, publishedAt: item.publishedAt,
-    timeKind: item.timeKind, topicSlug: topics.find((t) => t.id === item.topicId)?.slug ?? null, neighborhood: item.neighborhood,
+    timeKind: item.timeKind, topicSlug: topics.get(item.topicId ?? "")?.slug ?? null, neighborhood: item.neighborhood,
     enrichmentStatus: item.enrichmentStatus, enrichmentProvider: item.enrichmentProvider });
 }
 function selected(evidence: readonly Observation[], query: ReadQuery, now: Date) {
@@ -74,15 +74,17 @@ function selected(evidence: readonly Observation[], query: ReadQuery, now: Date)
 }
 export function metricTopics(state: ReadState, query: ReadQuery, now: Date) {
   const evidence = toObservations(state.items, state.topics);
+  const records = new Map(state.topics.map((record) => [record.slug, record]));
   return evaluateTopics(state.topics.map(toDomainTopic), evidence, now).map((t) => {
     const { method: _method, currentCount: _current, baselineCount: _baseline, totalCount: _total, evidence: _evidence, ...safe } = t;
     void _method; void _current; void _baseline; void _total; void _evidence;
-    const record = state.topics.find((r) => r.slug === t.slug)!;
-    const located = selected(t.evidence, { ...query, source: undefined }, now).filter((o) => o.neighborhood);
+    const record = records.get(t.slug)!;
+    const activity = selected(t.evidence, { ...query, source: undefined }, now);
+    const located = activity.filter((o) => o.neighborhood);
     const mentions = new Map<string, number>();
     for (const o of located) mentions.set(o.neighborhood!, (mentions.get(o.neighborhood!) ?? 0) + 1);
     const neighborhood = [...mentions].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? record.neighborhood;
-    return { public: publicTopicSchema.parse({ ...safe, activityCount: selected(t.evidence, { ...query, source: undefined }, now).length,
+    return { public: publicTopicSchema.parse({ ...safe, activityCount: activity.length,
       semanticCategory: state.semanticCategories[record.id] ?? legacySemanticCategory[record.category], neighborhood }), evidence: t.evidence };
   });
 }
@@ -102,56 +104,63 @@ function hotspotRows(topics: ReturnType<typeof metricTopics>, query: ReadQuery, 
   }).sort((a, b) => b.activity - a.activity || a.neighborhood.localeCompare(b.neighborhood));
 }
 const categoryMatches = (topic: PublicTopic, category: ReadQuery["category"]) => !category || topic.category === category || topic.semanticCategory === category;
-function topicCandidates(state: ReadState, query: ReadQuery, now: Date) {
-  return metricTopics(state, query, now).filter((t) => t.public.activityCount >= 2 && categoryMatches(t.public, query.category)
+function topicCandidates(metrics: ReturnType<typeof metricTopics>, query: ReadQuery, now: Date) {
+  return metrics.filter((t) => t.public.activityCount >= 2 && categoryMatches(t.public, query.category)
     && (!query.source || selected(t.evidence, query, now).length > 0)).sort((a, b) => order(a.public, b.public));
 }
-export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
+function projectionStatus(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
   const snapshot = info(state, query, now), sourceStatuses = publicSources(state.snapshot?.sources ?? [], state.sourceRuns, now, state.mode);
-  const candidates = topicCandidates(state, query, now);
-  const byId = new Map(state.items.map((i) => [i.id, i]));
-  // The same connected-identity dedupe protects pending stream rows and ranked evidence.
-  const streams = deduplicateEvidence(state.items.filter((i) => i.enrichmentStatus !== "irrelevant" && (i.enrichmentStatus !== "completed" || i.localRelevance >= 0.5))
-    .map((i) => ({ id: i.id, source: i.source, sourceId: i.sourceId, url: i.originalUrl, canonicalUrl: i.canonicalUrl, title: i.title,
-      excerpt: i.excerpt, text: i.excerpt, domain: i.domain, sourceType: i.source === "gdelt" ? "news" as const : i.source === "bluesky" ? "social" as const : "tech" as const,
-      publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind,
-      topicSlug: state.topics.find((t) => t.id === i.topicId)?.slug ?? "unenriched", neighborhood: i.neighborhood })), now);
-  const stream = selected(streams, query, now).filter((o) => {
-    if (!query.category) return true;
-    const item = byId.get(o.id)!, topic = state.topics.find((t) => t.id === item.topicId);
-    return topic && (topic.category === query.category || (state.semanticCategories[topic.id] ?? legacySemanticCategory[topic.category]) === query.category);
-  })
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   let status: Pulse["status"] = state.mode === "demo" ? "demo" : !state.snapshot ? "unavailable" : state.snapshot.status;
   if (status === "healthy" && (snapshot.stale || snapshot.refreshDelayed || sourceStatuses.some((s) => s.stale || s.status !== "ok"))) status = "degraded";
   const notices = [failureNotice, state.snapshot?.notice,
     snapshot.stale && state.snapshot ? "The collection is over 90 minutes old; displayed metrics have been aged using the current time." : null,
     snapshot.refreshDelayed ? "Read-model refresh is delayed; showing the last validated cached data." : null,
     state.snapshot?.version === "v1" ? "Scoring updated to v2 using retained evidence; the collection timestamp is unchanged." : null];
+  return { snapshot, sourceStatuses, status,
+    notice: notices.filter(Boolean).join(" ") || (status === "unavailable" ? "No live snapshot is available yet." : null) };
+}
+export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
+  const { snapshot, sourceStatuses, status, notice } = projectionStatus(state, query, now, failureNotice);
+  const metrics = metricTopics(state, query, now), candidates = topicCandidates(metrics, query, now);
+  const byId = new Map(state.items.map((i) => [i.id, i]));
+  const topicsById = new Map(state.topics.map((topic) => [topic.id, topic]));
+  // The same connected-identity dedupe protects pending stream rows and ranked evidence.
+  const streams = deduplicateEvidence(state.items.filter((i) => i.enrichmentStatus !== "irrelevant" && (i.enrichmentStatus !== "completed" || i.localRelevance >= 0.5))
+    .map((i) => ({ id: i.id, source: i.source, sourceId: i.sourceId, url: i.originalUrl, canonicalUrl: i.canonicalUrl, title: i.title,
+      excerpt: i.excerpt, text: i.excerpt, domain: i.domain, sourceType: i.source === "gdelt" ? "news" as const : i.source === "bluesky" ? "social" as const : "tech" as const,
+      publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind,
+      topicSlug: topicsById.get(i.topicId ?? "")?.slug ?? "unenriched", neighborhood: i.neighborhood })), now);
+  const stream = selected(streams, query, now).filter((o) => {
+    if (!query.category) return true;
+    const item = byId.get(o.id)!, topic = topicsById.get(item.topicId ?? "");
+    return topic && (topic.category === query.category || (state.semanticCategories[topic.id] ?? legacySemanticCategory[topic.category]) === query.category);
+  })
+    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   const visible = state.snapshot ? candidates : [];
   return dashboardSchema.parse({ version: "v2", mode: state.mode, generatedAt: snapshot.capturedAt, evaluatedAt: snapshot.evaluatedAt,
     stale: snapshot.stale, status, totalSignals: state.snapshot?.totalSignals ?? 0,
-    notice: notices.filter(Boolean).join(" ") || (status === "unavailable" ? "No live snapshot is available yet." : null), enrichment: state.snapshot?.enrichment,
+    notice, enrichment: state.snapshot?.enrichment,
     window: query.window, filters: { category: query.category ?? null, source: query.source ?? null }, snapshot,
     topTopics: visible.slice(0, 50).map((t) => t.public), risingTopics: visible.filter((t) => ["HOT", "RISING", "EMERGING"].includes(t.public.lifecycle)).slice(0, 50).map((t) => t.public),
-    topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, state.topics)),
+    topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, topicsById)),
     signalCount: stream.length, streamTruncated: stream.length > 30, sources: sourceStatuses, availableSources: available(sourceStatuses),
     lastSuccessfulIngestion: state.mode === "demo" ? null : state.lastSuccessfulIngestion?.finishedAt ?? null,
-    hotspots: hotspotRows(state.snapshot ? metricTopics(state, query, now).filter((t) => categoryMatches(t.public, query.category)) : [], query, now) });
+    hotspots: hotspotRows(state.snapshot ? metrics.filter((t) => categoryMatches(t.public, query.category)) : [], query, now) });
 }
 export function projectTopicList(state: ReadState, query: TopicListQuery, now: Date, failureNotice?: string) {
-  const dashboard = projectDashboard(state, query, now, failureNotice);
-  const candidates = state.snapshot ? topicCandidates(state, query, now).filter((t) => (!query.lifecycle || t.public.lifecycle === query.lifecycle)
+  const { snapshot, status } = projectionStatus(state, query, now, failureNotice);
+  const candidates = state.snapshot ? topicCandidates(metricTopics(state, query, now), query, now).filter((t) => (!query.lifecycle || t.public.lifecycle === query.lifecycle)
     && (!query.q || (t.public.title + " " + t.public.description).toLowerCase().includes(query.q.toLowerCase()))) : [];
-  return topicListSchema.parse({ mode: state.mode, status: dashboard.status, generatedAt: dashboard.generatedAt, stale: dashboard.stale,
-    total: candidates.length, topics: candidates.slice(0, query.limit).map((t) => t.public), snapshot: dashboard.snapshot });
+  return topicListSchema.parse({ mode: state.mode, status, generatedAt: snapshot.capturedAt, stale: snapshot.stale,
+    total: candidates.length, topics: candidates.slice(0, query.limit).map((t) => t.public), snapshot });
 }
 export function projectTopic(state: ReadState, slug: string, now: Date) {
-  const query: ReadQuery = { window: "24h" }, dashboard = projectDashboard(state, query, now);
+  const query: ReadQuery = { window: "24h" }, { snapshot, status, notice } = projectionStatus(state, query, now);
   const metrics = metricTopics(state, query, now), match = metrics.find((t) => t.public.slug === slug);
   if (!match) return null;
   const byId = new Map(state.items.map((i) => [i.id, i]));
-  const evidence = match.evidence.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, state.topics));
+  const topicsById = new Map(state.topics.map((topic) => [topic.id, topic]));
+  const evidence = match.evidence.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, topicsById));
   const neighborhoods = new Set(match.evidence.flatMap((o) => o.neighborhood ? [o.neighborhood] : []));
   const related = metrics.filter((t) => t.public.slug !== slug).flatMap((t) => t.evidence.filter((o) => t.public.semanticCategory !== "other" && t.public.semanticCategory === match.public.semanticCategory
     || o.neighborhood && neighborhoods.has(o.neighborhood))).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id)).slice(0, 12);
@@ -160,12 +169,12 @@ export function projectTopic(state: ReadState, slug: string, now: Date) {
     pulseScore: s.pulseScore, confidence: s.confidence, lifecycle: s.lifecycle, velocityScore: s.velocityScore, volumeScore: s.volumeScore,
     diversityScore: s.diversityScore, recencyScore: s.recencyScore }));
   const t = match.public;
-  return topicDetailSchema.parse({ mode: state.mode, status: dashboard.status, generatedAt: dashboard.generatedAt, stale: dashboard.stale,
-    notice: dashboard.notice, snapshot: dashboard.snapshot, topic: t, summary: t.description, pulseScore: t.score,
+  return topicDetailSchema.parse({ mode: state.mode, status, generatedAt: snapshot.capturedAt, stale: snapshot.stale,
+    notice, snapshot, topic: t, summary: t.description, pulseScore: t.score,
     growth: { current2h: t.current2h, previous2h: t.previous2h, ratio: t.growthRatio, changePercent: t.growthPercent, capped: t.changeCapped },
     confidence: t.confidence, lifecycle: t.lifecycle, history, historyTruncated: state.historyTruncated, sourceEvidence: evidence,
     locationEvidence: supportedLocation(match.evidence),
-    evidenceTruncated: match.evidence.length > 30, relatedSignals: related.map((o) => publicSignal(byId.get(o.id)!, state.topics)) });
+    evidenceTruncated: match.evidence.length > 30, relatedSignals: related.map((o) => publicSignal(byId.get(o.id)!, topicsById)) });
 }
 export function projectHealth(data: Awaited<ReturnType<ReadRepository["health"]>>, now: Date, databaseStatus: "ok" | "unconfigured" | "unavailable" | "not_required" = "ok", mode: Pulse["mode"] = "live") {
   const rows = publicSources(data.sources, data.sourceRuns, now, mode), generatedAt = data.generatedAt;

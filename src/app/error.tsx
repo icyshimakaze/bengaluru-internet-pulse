@@ -1,3 +1,2 @@
 "use client";
-import { Button } from "@/components/ui/button";
-export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) { return <section className="empty-state page-empty"><h1>The pulse is temporarily unavailable.</h1><p>Please retry to load the latest snapshot.</p><Button onClick={reset}>Try again</Button></section>; }
+export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) { return <section className="topic-recovery"><span className="editorial-eyebrow">READ UNAVAILABLE</span><h1>The pulse is temporarily unavailable.</h1><p>The latest snapshot could not be loaded.</p><div><button className="editorial-link" onClick={reset}>Try again ↗</button></div></section>; }

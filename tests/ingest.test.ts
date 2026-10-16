@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { testRepository as repository } from "./database";
 import { ingest } from "@/lib/pipeline/ingest";
 import { createAdapters } from "@/lib/sources/adapters";
@@ -9,6 +9,7 @@ import { now, observation, pulse } from "./helpers";
 import { classifyAI } from "@/lib/pipeline/ai";
 import { fromSignal } from "@/lib/db/mapping";
 const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { provider: "heuristic" });
+afterEach(() => vi.unstubAllEnvs());
 function adapters(failed?: Source): Record<Source, SourceAdapter> {
   const adapter = (source: Source): SourceAdapter => async () => {
     if (source === failed) throw new Error("upstream outage");
@@ -18,6 +19,13 @@ function adapters(failed?: Source): Record<Source, SourceAdapter> {
   return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews") };
 }
 describe("transactional pipeline", () => {
+  it.each(["ENRICHMENT_PROVIDER", "AI_BATCH_SIZE"])("rejects invalid %s before storage or source work", async (name) => {
+    vi.stubEnv(name, "invalid");
+    const repo = repository(), initialize = vi.spyOn(repo, "initialize"), supplied = adapters();
+    const collect = vi.spyOn(supplied, "gdelt");
+    await expect(ingest({ repository: repo, adapters: supplied, now })).rejects.toThrow(name);
+    expect(initialize).not.toHaveBeenCalled(); expect(collect).not.toHaveBeenCalled();
+  });
   it("persists partial query coverage and actual duplicate counters from all three adapters", async () => {
     const repo = repository();
     const collected = createAdapters(async (value) => {
@@ -26,7 +34,7 @@ describe("transactional pipeline", () => {
         if (url.searchParams.get("query")?.includes("airport")) throw new Error("HTTP_503");
         return fixtures.gdelt;
       }
-      return url.hostname === "public.api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
+      return url.hostname === "api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
     });
     const first = await ingest({ repository: repo, now, adapters: collected, timeoutMs: 1000, enrich: mock });
     expect(first.added).toBe(3);
@@ -56,7 +64,7 @@ describe("transactional pipeline", () => {
     const repo = repository();
     const collected = createAdapters(async (value) => {
       const host = new URL(value).hostname;
-      return host === "api.gdeltproject.org" ? fixtures.gdelt : host === "public.api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
+      return host === "api.gdeltproject.org" ? fixtures.gdelt : host === "api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
     });
     const first = await ingest({ repository: repo, mode: "demo", now, adapters: collected, timeoutMs: 1000, enrich: mock });
     const second = await ingest({ repository: repo, mode: "demo", now, adapters: collected, timeoutMs: 1000, enrich: mock });

@@ -3,6 +3,7 @@ import { createClient, type Client } from "@libsql/client";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { ingest } from "../src/lib/pipeline/ingest";
 import { getDatabase } from "../src/lib/db/client";
+import { getIngestionEnv } from "../src/lib/server/ingestion-env";
 import { Repository } from "../src/lib/db/repository";
 import { createAdapters } from "../src/lib/sources/adapters";
 import { FIXTURE_NOW } from "../src/fixtures/demo";
@@ -21,6 +22,7 @@ try {
     console.info("Usage: npm run ingest [-- --fixtures | --require-remote]\nLive: configured Turso database or local .data/pulse.db.\nScheduled: --require-remote requires a remote database URL and token.\nFixtures: offline fictional signals in isolated .data/ingestion-fixtures.db.");
   } else {
     if (args.requireRemote) requireRemoteDatabase(process.env);
+    getIngestionEnv();
     if (fixtureMode) {
       mkdirSync(".data", { recursive: true });
       client = createClient({ url: "file:.data/ingestion-fixtures.db" });
@@ -30,7 +32,7 @@ try {
     }
     const adapters = fixtureMode ? createAdapters(async (url) => {
       const host = new URL(url).hostname;
-      return host === "api.gdeltproject.org" ? fixtures.gdelt : host === "public.api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
+      return host === "api.gdeltproject.org" ? fixtures.gdelt : host === "api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
     }) : undefined;
     const result = await ingest({ repository: new Repository(client), ...(fixtureMode ? {
       mode: "demo", enrichmentProvider: "heuristic", now: FIXTURE_NOW, timeoutMs: 1000, adapters,
@@ -44,7 +46,9 @@ try {
 } catch (error) {
   const report = failedIngestionReport(error, fixtureMode);
   console.error(JSON.stringify(report));
-  if (process.env.GITHUB_ACTIONS === "true") console.error("::error::Ingestion failed. Check remote database configuration, migrations and connectivity.");
+  if (process.env.GITHUB_ACTIONS === "true") console.error(report.failureCode === "INVALID_INGESTION_CONFIGURATION"
+    ? `::error::Invalid worker configuration: ${report.invalidVariables.join(", ")}. AI_BATCH_SIZE must be 1–10; MAX_AI_ITEMS_PER_RUN must be 1–30.`
+    : "::error::Ingestion failed. Check remote database configuration, migrations and connectivity.");
   try { writeSummary(report); } catch { console.error(JSON.stringify({ event: "cli.summary.failed", code: "SUMMARY_WRITE_FAILED" })); }
   process.exitCode = 1;
 } finally {

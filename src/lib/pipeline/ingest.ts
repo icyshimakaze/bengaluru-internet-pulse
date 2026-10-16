@@ -7,7 +7,7 @@ import { fromSignal, toSignal } from "@/lib/db/mapping";
 import { type IngestionRun } from "@/lib/db/records";
 import { validateEnrichment, enrichmentTopicSchema, editorialCategory, type EnrichmentTopic } from "@/lib/domain/enrichment";
 import { enrichmentProviderSchema, validProviderModel, emptyEnrichmentRun, enrichmentRunSchema, actualProvider, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
-import { getEnv } from "@/lib/server/env";
+import { getIngestionEnv } from "@/lib/server/ingestion-env";
 import { log } from "@/lib/server/logger";
 import { deduplicate } from "./normalize";
 import { classifyAI, type Classification } from "./ai";
@@ -22,6 +22,8 @@ type Options = {
 export type IngestionResult = { skipped: boolean; added: number; pulse: Pulse | null;
   runs: IngestionRun[]; pruned: Awaited<ReturnType<Repository["pruneOldData"]>> | null };
 export async function ingest(options: Options = {}): Promise<IngestionResult> {
+  // Reject invalid worker configuration before migrations, collection or writes.
+  const env = getIngestionEnv();
   const now = options.now ?? new Date();
   const isFixture = options.mode === "demo";
   const repository = options.repository ?? new Repository(getDatabase());
@@ -37,7 +39,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     for (const source of sources) runs.push(await repository.startIngestionRun(source, now, isFixture));
     const existing = await repository.load(now, isFixture);
     const adapters = options.adapters ?? createAdapters();
-    const timeout = options.timeoutMs ?? getEnv().SOURCE_TIMEOUT_MS;
+    const timeout = options.timeoutMs ?? env.SOURCE_TIMEOUT_MS;
     const results = await Promise.allSettled(sources.map((source) => adapters[source](now, timeout)));
     health = results.map((r, i) => r.status === "fulfilled" ? r.value.health : {
       source: sources[i]!, status: "error", fetched: 0, accepted: 0, rejected: 0, durationMs: 0, checkedAt: now.toISOString(), error: "SOURCE_UNAVAILABLE",
@@ -52,11 +54,10 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
       ingestionRunId: runs.find((r) => r.source === signal.source)!.id, isFixture,
     })), lease, options.now ?? new Date());
     log("info", "ingest.collected", { returned: collected.length, unique: unique.length, inserted: added });
-    const env = getEnv();
     const selected = isFixture ? "heuristic" : enrichmentProviderSchema.parse(options.enrichmentProvider ?? env.ENRICHMENT_PROVIDER);
     let enrichmentRun = emptyEnrichmentRun(selected);
     const catalog = await repository.enrichment.activeTopics(now, isFixture);
-    const queue = !env.ENRICHMENT_ENABLED ? [] : await repository.enrichment.claimPending(now, isFixture, env.MAX_AI_ITEMS_PER_RUN, lease);
+    const queue = !env.ENRICHMENT_ENABLED ? [] : await repository.enrichment.claimPending(options.now ?? new Date(), isFixture, env.MAX_AI_ITEMS_PER_RUN, lease);
     const candidates = queue.map(toSignal);
     let classifications = new Map<string, Classification>();
     try { if (candidates.length) classifications = await (options.enrich ?? classifyAI)(candidates, catalog, {

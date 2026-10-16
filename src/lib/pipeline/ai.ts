@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { signalSchema, type Signal } from "@/lib/domain/schema";
 import { enrichmentTopicSchema, type EnrichmentTopic, type EnrichmentAssignment, type EnrichmentResult } from "@/lib/domain/enrichment";
 import { enrichmentProviderSchema, emptyEnrichmentRun, enrichmentRunSchema, type EnrichmentProviderName, type EnrichmentRun } from "@/lib/domain/enrichment-providers";
-import { getEnv } from "@/lib/server/env";
+import { getIngestionEnv } from "@/lib/server/ingestion-env";
 import { log } from "@/lib/server/logger";
 import { withAbort } from "@/lib/sources/http";
 import { getEnrichmentProvider } from "@/lib/enrichment/factory";
@@ -30,13 +30,13 @@ function failureCode(error: unknown): string {
 }
 function transient(error: unknown): boolean {
   const http = status(error);
-  return http !== undefined ? [408, 409, 429].includes(http) || http >= 500 && http <= 599
+  return http !== undefined ? [408, 409].includes(http) || http >= 500 && http <= 599
     : error instanceof Error && ["APIConnectionError", "APIConnectionTimeoutError", "TypeError"].includes(error.name);
 }
 
 export async function classifyAI(input: Signal[], inputCatalog: EnrichmentTopic[], options: EnrichmentOptions = {}): Promise<Map<string, Classification>> {
   const result = new Map<string, Classification>();
-  const env = getEnv(), selected = enrichmentProviderSchema.parse(options.provider ?? env.ENRICHMENT_PROVIDER);
+  const env = getIngestionEnv(), selected = enrichmentProviderSchema.parse(options.provider ?? env.ENRICHMENT_PROVIDER);
   const report = emptyEnrichmentRun(selected);
   if (!input.length || !env.ENRICHMENT_ENABLED) { options.onReport?.(report); return result; }
   const signals = input.slice(0, env.MAX_AI_ITEMS_PER_RUN).map((s) => signalSchema.parse(s));

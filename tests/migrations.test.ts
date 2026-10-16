@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { TransactionMode } from "@libsql/client";
 import { testRepository } from "./database";
 import { loadMigrations, migrate } from "@/lib/db/schema";
 import { demoDataset, demoPulse } from "@/fixtures/demo";
@@ -17,6 +18,28 @@ const legacySql = `
   PRAGMA user_version=1;
 `;
 describe("versioned SQL migrations", () => {
+  it("initializes remote backends that reject user_version writes while retaining the authoritative ledger", async () => {
+    const repo = testRepository();
+    const remote = new Proxy(repo.client, { get(target, property) {
+      if (property === "protocol") return "http";
+      if (property === "transaction") return async (mode?: TransactionMode) => {
+        const transaction = await target.transaction(mode), execute = transaction.execute.bind(transaction);
+        vi.spyOn(transaction, "execute").mockImplementation(async (statement) => {
+          const sql = typeof statement === "string" ? statement : statement.sql;
+          if (/PRAGMA\s+user_version\s*=/i.test(sql)) throw new Error("SQL_PARSE_ERROR: SQL not allowed statement: PRAGMA user_version");
+          return execute(statement);
+        });
+        return transaction;
+      };
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    } });
+    expect(await migrate(remote, undefined, now)).toEqual({ applied: [1, 2, 3, 4, 5, 6], version: 6 });
+    expect(await migrate(remote, undefined, now)).toEqual({ applied: [], version: 6 });
+    expect((await repo.client.execute("SELECT count(*) AS count FROM schema_migrations")).rows[0]?.count).toBe(6);
+    expect((await repo.client.execute("PRAGMA user_version")).rows[0]?.user_version).toBe(0);
+    expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
+  });
   it("creates relational tables, required fields, indexes, foreign keys and an immutable ledger", async () => {
     const repo = testRepository();
     expect(await migrate(repo.client, undefined, now)).toEqual({ applied: [1, 2, 3, 4, 5, 6], version: 6 });

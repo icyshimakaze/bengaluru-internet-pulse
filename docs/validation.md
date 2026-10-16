@@ -1,5 +1,48 @@
 # Validation record
 
+## Pre-launch security audit, 16 October 2026
+
+The [pre-launch security audit](prelaunch-security-audit.md) passed lint, 377 unit tests across 26 files, TypeScript, the production build and 27 browser checks. New coverage includes malicious URLs/text, model grounding/catalog/batch boundaries, rate-limit costs, archive growth, indexed duplicate equivalence and immutable CI dependencies. Both full and production-only npm dependency audits reported zero known vulnerabilities.
+
+## Stored-data engineering audit, 15 October 2026
+
+- Inspected actual Turso rows through isolated audit workflows using existing repository authentication. The initial remote database had zero observations. Fresh collection produced 84 real Bluesky observations; a later full audit inspected all 173 retained items and 107 topics, with no fixture substitution or AI API requests.
+- Repaired six confirmed restaurant/music category errors atomically. Reproduced and fixed split named events, terminal relevance mistakes, truncated vacancy labels, address/organizer category leakage, old-first enrichment starvation, and near-copy syndication counting. Details and final live results are recorded in [Data quality audit](data-quality-audit.md).
+- `npm test`: 348 tests passed across 24 files. Tests include reordered event paraphrases, conflicting dates/routes/causes/funding amounts, distinct vacancy IDs/seniority, terminal historical repairs, preserved timestamps/history/provenance, deduplication before scoring, bounded queue order, and malformed persisted records. All API provider tests use mocked clients.
+- Strict TypeScript, lint, the final production build and all 26 production-browser tests passed after the last repair changes.
+- A full-suite attempt run alongside a production build encountered one unexpected Vitest worker exit. The isolated repeat passed all tests without unhandled errors; no failing assertion was suppressed.
+
+## Production SEO and GitHub ingestion repair, 15 October 2026
+
+- `npm run lint`: passed. `npm test`: 322 tests passed across 23 files. Regression checks cover explicit production origins, demo/preview crawl exclusion, worker-limit configuration errors before storage, and remote migrations that reject the SQLite file-header pragma.
+- `npm run build`: passed with every AI/provider/model/batch setting absent, the Vercel flag, `SITE_URL` and placeholder database URL/token only. A temporary fetch/HTTP guard recorded no requests with telemetry disabled. Strict TypeScript compilation passed.
+- Final production-server smoke checks with all AI settings absent passed for initialized-empty storage and unreachable remote storage, including configured storage without Vercel's system flag. Homepages returned 200 with honest empty/unavailable states; health returned controlled 503 with database `ok` or `unavailable`. All 20 generated browser JavaScript bundles had zero credential/provider-setting/endpoint matches.
+- `npm run test:e2e`: all 26 production browser checks passed. Coverage includes page metadata/canonicals/social images, ICO/SVG/Apple icons, production robots/sitemap, nonindexable demo/live-unconfigured topic states, API indexing headers, browser-bundle secrecy, maps/hydration, mobile layouts and loading/error recovery.
+- Actual failed Actions logs identified `AI_BATCH_SIZE=20` and `MAX_AI_ITEMS_PER_RUN=40`. Repository Variables were corrected to 10/30 and read back. Configuration-only run [38600653268](https://github.com/icyshimakaze/bengaluru-internet-pulse/actions/runs/38600653268) passed without ingestion.
+- An isolated diagnostic branch verified the real Turso token/connectivity and identified `PRAGMA user_version = 1` as a remotely rejected statement. With the compatibility fix, all six migrations applied successfully in run [38613012388](https://github.com/icyshimakaze/bengaluru-internet-pulse/actions/runs/38613012388). The existing ledger and migration checksums are preserved.
+- The normal main-branch ingestion workflow then completed successfully in run [38615303283](https://github.com/icyshimakaze/bengaluru-internet-pulse/actions/runs/38615303283), using an explicit free-heuristic override. It committed an honest degraded snapshot: zero observations/topics, GDELT timeouts, Bluesky HTTP 403 and healthy empty Hacker News queries. No API enrichment took place and no AI credits were consumed. Repository provider/model selection was left unchanged.
+- Credential-free runner probe [38618462864](https://github.com/icyshimakaze/bengaluru-internet-pulse/actions/runs/38618462864) isolated the Bluesky search 403 to the cached public host. The official direct AppView host returned a valid HTTP 200 post envelope; the adapter/test contract now uses it without account credentials.
+- These local web/workflow fixes still require publishing and redeployment. The previously inspected Vercel deployment served labeled demo data, so its connection to the same live Turso database remains unverified. See [Production audit](production-audit.md) for deployment requirements and remaining source/provider risks.
+
+## First-deployment production audit, 14 October 2026
+
+- Audited the deployed Vercel URL with direct HTTP requests and a headless browser. Health/pulse/topic/hotspot reads returned explicitly labeled demo data; health reported database `not_required`, so remote Turso connectivity and actual Actions collection/enrichment remain unverified. See [Production audit](production-audit.md).
+- `npm run lint`: passed. `npm test`: 297 tests passed across 23 files. New regression checks cover production-host validation, canonical/share metadata, bounded database transport, opaque cache namespaces and retained topic briefs during source outages.
+- `npm run build`: passed with all worker AI variables absent, only placeholder remote database configuration and the Vercel flag present. The temporary HTTP/fetch guard recorded no requests with telemetry disabled. Metadata and its local PNG require no external service.
+- `npm run test:e2e`: all 21 browser tests passed, including metadata/image delivery, missing-topic indexing, generated-bundle secrecy, responsive layouts, hydration, Leaflet mounting/reopening, keyboard/pointer interaction, attribution, tile outage/retry, source links and loading/error recovery. Test expectations account for Next.js root-URL normalization and map panning; the map HTTP probe permits one retry for a reset connection and still exposes HTTP errors unchanged.
+- Inspected deployed pages at 320/390/768/1440 pixels: no settled overflow, browser runtime errors or hydration errors. Deployed SSR contained no Leaflet container. Fifteen loaded deployed JavaScript chunks contained no database/AI credential names or AI endpoints; the browser made no direct database/source/AI API requests. OSM tiles loaded during inspection and the outage fallback remains covered by local fixtures.
+- Temporary production servers with every AI setting absent exercised initialized-empty and failed remote-connection cases, including a configured database without a Vercel flag. All served honest live empty/error states. Caches remained intact across database changes and did not cross-contaminate reads. All 20 generated JavaScript bundles were additionally scanned with zero secret/provider-configuration matches.
+- Local fixes add stable canonical/Open Graph/Twitter metadata with a static share image, configured-database live defaults, eight-second cancellable database requests, database-specific cache namespaces and readable retained briefs during source outages. The deployed demo still needs the fixed revision and live configuration. No live AI request or API credit was used.
+
+## First Vercel deployment boundary, 14 October 2026
+
+- `npm run lint`: passed with no warnings or errors.
+- `npm test`: 285 tests passed across 21 files. Regression checks cover Vercel live defaults, absent/invalid worker settings ignored by web reads, worker validation before storage/collection, empty databases, health HTTP statuses and redacted connection failures. API provider tests remain mocked.
+- `npm run build`: passed with only placeholder remote Turso URL/token and the Vercel platform flag; all provider keys/models/selection, AI limits, source timeout and HTTP ingestion secret were absent. A temporary HTTP/fetch guard recorded no requests with Next.js telemetry disabled. The build performed no source, AI or database HTTP requests.
+- Temporary production servers with no AI settings verified an initialized empty local database and a Vercel-mode failed connection to a closed loopback endpoint. Both homepages returned 200 and showed the empty state. Health returned 503 with application `ok` and database `ok`/`unavailable` respectively; pulse returned honest empty live data, the failed connection exposed the controlled unavailable notice, and unauthenticated ingestion returned 401.
+- All 20 generated browser JavaScript bundles were scanned: no OpenAI/xKiro key names or endpoints, Turso URL/token names, provider environment setting or test credential values were present. Production credentials and live provider account access were not used.
+- CI now includes a live Vercel build with only database placeholders and the platform flag, alongside the existing provider-selection builds. Deployment documentation lists exactly two required Vercel variables and keeps ingestion configuration in GitHub Actions.
+
 ## Independent provider configuration, 13 October 2026
 
 - `npm run lint`, `npm run typecheck` and actionlint: passed.

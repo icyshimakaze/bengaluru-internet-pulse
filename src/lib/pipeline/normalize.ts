@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
+import { httpUrlSchema, signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
+import { sameSyndicatedContent, syndicationSignature, SyndicationIndex } from "./syndication";
 
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export function cleanText(value: string): string {
   return value.replace(/<[^>]*>/g, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
 }
 export function canonicalUrl(value: string): string {
-  const url = new URL(value);
+  const url = new URL(httpUrlSchema.parse(value));
   if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error("Unsafe URL");
   url.hash = "";
   url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
@@ -56,13 +57,21 @@ export function deduplicate<T extends Signal>(signals: readonly T[], existing: r
   const contents = new Set(existing.flatMap((s) => [s.contentHash, contentFingerprint({ title: s.title, excerpt: s.text, domain: s.domain })]));
   const ids = new Set(existing.map((s) => s.id));
   const sourceIds = new Set(existing.map((s) => `${s.source}:${s.sourceId}`));
+  const copies = existing.map(syndicationSignature);
+  const copyIndex = new SyndicationIndex();
+  copies.forEach((copy, index) => copyIndex.add(copy, index));
   return [...signals].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt) || a.id.localeCompare(b.id)).filter((s) => {
     const identity = `${s.source}:${s.sourceId}`;
     if (urls.has(s.canonicalUrl) || contents.has(s.contentHash) || ids.has(s.id) || sourceIds.has(identity)) return false;
+    const signature = syndicationSignature(s);
+    if ([...copyIndex.candidates(signature)].some((index) => sameSyndicatedContent(signature, copies[index]!))) return false;
+    copyIndex.add(signature, copies.length);
+    copies.push(signature);
     urls.add(s.canonicalUrl); contents.add(s.contentHash); ids.add(s.id); sourceIds.add(identity); return true;
   });
 }
 export function isBengaluruRelevant(text: string): boolean { return /\b(bengaluru|bangalore|bengalooru|namma\s+metro|bmrcl|bbmp)\b|ಬೆಂಗಳೂರು/i.test(text); }
 export function locate(text: string): Neighborhood | null {
-  return neighborhoods.find((n) => new RegExp(`\\b${n.replace(/ /g, "\\s+")}\\b`, "i").test(text)) ?? null;
+  const areas = neighborhoods.filter((n) => new RegExp(`\\b${n.replace(/ /g, "\\s+")}\\b`, "i").test(text.replace(/https?:\/\/\S+/gu, " ")));
+  return areas.length === 1 ? areas[0]! : null;
 }

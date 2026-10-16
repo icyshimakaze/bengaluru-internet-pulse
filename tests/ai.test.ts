@@ -7,7 +7,7 @@ vi.mock("openai", () => ({ default: class {
 import { classifyAI, ENRICHMENT_INSTRUCTIONS } from "@/lib/pipeline/ai";
 import { getEnrichmentProvider } from "@/lib/enrichment/factory";
 import { enrichmentBatchSchema, type EnrichmentResult, type EnrichmentTopic } from "@/lib/domain/enrichment";
-import { parseEnv } from "@/lib/server/env";
+import { parseIngestionEnv as parseEnv } from "@/lib/server/ingestion-env";
 import type { EnrichmentRun, EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
 import { type Signal } from "@/lib/domain/schema";
 import { observation as baseObservation } from "./helpers";
@@ -43,7 +43,7 @@ describe("three enrichment providers and safe fallback", () => {
     expect((await classifyAI([signal], [active])).get(signal.id)).toMatchObject({ provider: "openai", model: "gpt-6-luna" });
     expect(parse.mock.calls[0]![0]).toMatchObject({ model: "gpt-6-luna", store: false, max_output_tokens: 4000,
       tools: [], tool_choice: "none", text: { format: { type: "json_schema", strict: true } } });
-    expect(construct).toHaveBeenCalledWith({ apiKey: "PRIVATE_OPENAI_KEY", baseURL: "https://api.openai.com/v1", timeout: 8000, maxRetries: 0 });
+    expect(construct).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "PRIVATE_OPENAI_KEY", baseURL: "https://api.openai.com/v1", timeout: 8000, maxRetries: 0, fetch: expect.any(Function) }));
     expect(create).not.toHaveBeenCalled();
   });
   it.each(["openai/test-model", "z-ai/test-model", "google/test-model"])("preserves xKiro model %s and uses Chat Completions", async (model) => {
@@ -52,7 +52,7 @@ describe("three enrichment providers and safe fallback", () => {
     expect((await classifyAI([signal], [active])).get(signal.id)).toMatchObject({ provider: "xkiro", model });
     expect(create.mock.calls[0]![0]).toMatchObject({ model, response_format: { type: "json_object" }, max_tokens: 4000,
       stream: false, tools: [], tool_choice: "none" });
-    expect(construct).toHaveBeenCalledWith({ apiKey: "PRIVATE_XKIRO_KEY", baseURL: "https://api.xkiro.com/v1", timeout: 8000, maxRetries: 0 });
+    expect(construct).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "PRIVATE_XKIRO_KEY", baseURL: "https://api.xkiro.com/v1", timeout: 8000, maxRetries: 0, fetch: expect.any(Function) }));
     expect(parse).not.toHaveBeenCalled();
   });
   it("processes xKiro without an OpenAI key and ignores unused OpenAI configuration", async () => {
@@ -119,7 +119,7 @@ describe("three enrichment providers and safe fallback", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const result = await classifyAI([signal], [active], { onReport });
     expect(result.get(signal.id)?.provider).toBe("heuristic");
-    expect(create).toHaveBeenCalledTimes(http === 429 || http === 503 ? 2 : 1);
+    expect(create).toHaveBeenCalledTimes(http === 503 ? 2 : 1);
     expect(parse).not.toHaveBeenCalled(); expect(construct).toHaveBeenCalledTimes(1);
     expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ selectedProvider: "xkiro", actualProviders: ["heuristic"], fallbackCount: 1 }));
     expect(JSON.stringify(warn.mock.calls)).not.toContain("PRIVATE_XKIRO_KEY");
@@ -182,6 +182,36 @@ describe("three enrichment providers and safe fallback", () => {
     select("openai"); const a = observation("a"), b = observation("b");
     parse.mockResolvedValue(response([item(a), item(b, { existing_topic_id: "invented" })]));
     expect([...await classifyAI([a, b], [active])].every(([, assignment]) => assignment.provider === "heuristic")).toBe(true);
+  });
+  it("does not accept an unrelated catalog topic just because its ID and summary are valid", async () => {
+    select("openai"); const signal = observation("a");
+    const unrelated = { id: "unrelated", slug: "music-festival", canonical_label: "Music festival", category: "events" as const };
+    parse.mockResolvedValue(response([item(signal, { existing_topic_id: unrelated.id, slug: unrelated.slug,
+      canonical_label: unrelated.canonical_label, category: unrelated.category })]));
+    expect((await classifyAI([signal], [active, unrelated])).get(signal.id)?.provider).toBe("heuristic");
+  });
+  it("rejects a fabricated new event with only one borrowed source word", async () => {
+    select("openai"); const signal = observation("a");
+    const proposal = { canonical_label: "Whitefield earthquake destroys homes", slug: "whitefield-earthquake", category: "civic" as const };
+    parse.mockResolvedValue(response([item(signal, { ...proposal, existing_topic_id: null, new_topic: proposal })]));
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("heuristic");
+  });
+  it.each(["openai", "xkiro"] as const)("rejects oversized direct %s batches before spending credits", async (provider) => {
+    select(provider);
+    await expect(getEnrichmentProvider().enrich(Array.from({ length: 11 }, (_, i) => observation(String(i))), [active],
+      { signal: new AbortController().signal })).rejects.toThrow();
+    expect(parse).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled();
+  });
+  it("rejects a catalog ID which was not actually sent to the model", async () => {
+    select("openai"); const signal = observation("a");
+    const catalog = [active, ...Array.from({ length: 50 }, (_, i) => ({ ...active, id: `topic-${i}`, slug: `topic-${i}` }))];
+    parse.mockResolvedValue(response([item(signal)]));
+    await expect(getEnrichmentProvider().enrich([signal], catalog, { signal: new AbortController().signal })).rejects.toThrow("ENRICHMENT_TOPIC_ID");
+  });
+  it("uses only one rate-limited paid request across all batches", async () => {
+    select("xkiro"); vi.stubEnv("AI_BATCH_SIZE", "1"); create.mockRejectedValue({ status: 429, headers: new Headers({ "retry-after": "60" }) });
+    const assignments = await classifyAI([observation("a"), observation("b")], [active]);
+    expect(create).toHaveBeenCalledTimes(1); expect([...assignments.values()].every((a) => a.provider === "heuristic")).toBe(true);
   });
   it("records mixed processing when one batch falls back and the next API batch succeeds", async () => {
     select("xkiro"); vi.stubEnv("AI_BATCH_SIZE", "1"); const a = observation("a"), b = observation("b"), onReport = vi.fn();

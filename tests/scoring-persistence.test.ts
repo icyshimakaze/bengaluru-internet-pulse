@@ -81,6 +81,10 @@ describe("versioned scoring persistence", () => {
     await repo.publish([], [], pulse({ generatedAt: prunedCapture, evaluatedAt: prunedCapture }), prunedOwner, prunedAt);
     expect((await repo.fetchTopicHistory(record.id))[2]).toMatchObject({ count24h: 0, pulseScore: 0, lifecycle: "COOLING", firstSeenAt: record.firstSeenAt });
     expect((await repo.load(prunedAt)).items).toEqual([]);
+    await repo.releaseLease(prunedOwner);
+    const again = new Date(prunedAt.getTime() + HOUR), againOwner = (await repo.acquireLease(again))!;
+    await repo.publish([], [], pulse({ generatedAt: again.toISOString(), evaluatedAt: again.toISOString() }), againOwner, again);
+    expect(await repo.fetchTopicHistory(record.id)).toHaveLength(3);
   });
 
   it("rejects malformed scoring telemetry before changing persisted history", async () => {

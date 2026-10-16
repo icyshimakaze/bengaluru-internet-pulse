@@ -1,11 +1,11 @@
 "use client";
-import { useState } from "react";
+import { memo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { sourceNames } from "@/lib/domain/schema";
+import { sourceNames } from "@/lib/domain/source-labels";
 import type { DashboardData } from "@/lib/domain/read-models";
-import { formatTime } from "@/lib/utils";
-export function SourceStream({ pulse }: { pulse: DashboardData }) {
+import { formatTime } from "@/lib/format";
+export const SourceStream = memo(function SourceStream({ pulse }: { pulse: DashboardData }) {
   const [expanded, setExpanded] = useState(false);
   const stream = pulse.sourceStream.slice(0, expanded ? 30 : 6);
   return <section className="source-stream" aria-labelledby="stream-heading"><div className="editorial-section-heading"><div><h2 id="stream-heading">Source stream</h2><p>{pulse.mode === "demo" ? "Fictional fixture evidence · example URLs, not real source reports." : "Latest public evidence · every link leads to its original source."}</p></div><span className="panel-overline mono">{pulse.signalCount} SIGNALS · {pulse.window.toUpperCase()}</span></div>
@@ -15,4 +15,4 @@ export function SourceStream({ pulse }: { pulse: DashboardData }) {
     {pulse.sourceStream.length > 6 && <button className="stream-expand editorial-link" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show fewer signals ↑" : "Show " + (pulse.sourceStream.length - 6) + " more signals ↓"}</button>}
     <p className="stream-note">Repeated polls and syndicated copies are deduplicated.{pulse.streamTruncated ? " Showing the latest 30 signals." : ""} Public search is a sample of the city&apos;s conversation, not a census.</p>
   </section>;
-}
+});

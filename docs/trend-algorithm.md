@@ -4,7 +4,7 @@ The engine measures momentum from distinct public signals. An injected UTC clock
 
 ## Evidence and time windows
 
-Deduplicate globally before clustering or counting. IDs, source/source-ID pairs, canonical URLs, stored fingerprints and recomputed normalized content fingerprints identify connected duplicate groups. Keep the earliest publication timestamp, then smallest ID, from each group. This handles repeated polling, cross-source link sharing and exact syndicated content without rewarding an extra source or a refreshed polling timestamp. Paraphrases and coordinated authors are not reliably detectable.
+Deduplicate globally before clustering or counting. IDs, source/source-ID pairs, canonical URLs, stored fingerprints and recomputed normalized content fingerprints identify connected duplicate groups. Keep the earliest publication timestamp, then smallest ID, from each group. This handles repeated polling, cross-source link sharing and exact syndicated content without rewarding an extra source or a refreshed polling timestamp. Near-identical linked articles also connect when title and excerpt each share at least seven substantive tokens, both directions have at least 90% token coverage, numeric tokens agree and timestamps differ by at most 24 hours. Pure social-post/discussion URLs do not qualify for this near-copy rule. Independent event paraphrases remain distinct evidence, even when they share a canonical topic. Coordinated authors are not reliably detectable. These are evidence-quality corrections; the v2 score equations and caps are unchanged, and historical snapshots are not rewritten.
 
 For scoring time `t`, with hours measured from publication/discovery timestamps:
 
@@ -94,7 +94,7 @@ Only evaluations with `c ≥2` enter the public ranked list. Empty/expired store
 
 ## Snapshots and versioning
 
-Every completed ingestion publication atomically stores a v2 dashboard snapshot, current topic metrics and a topic snapshot for each retained canonical topic, including NEW, below-threshold and zero-current evaluations. Zero snapshots continue for topics seen within the previous 30 days, then stop so inactive data can age out. Source run counters commit in the same transaction; collected pending data survives publication failure. A skipped overlapping run creates no snapshot.
+Every completed ingestion publication atomically stores a v2 dashboard snapshot, current topic metrics and history for topics with 24-hour evidence, including NEW, below-threshold and zero-current evaluations. The transition to zero 24-hour evidence is recorded once; repeated empty polls do not append identical archived snapshots. Evidence returning to a topic resumes captures. Source run counters commit in the same transaction; collected pending data survives publication failure. A skipped overlapping run creates no snapshot.
 
 Migration 5 adds v2 lifecycle and telemetry columns without modifying old migration checksums, evidence or historical scores. The original lifecycle columns and 3h counts remain compatibility telemetry; `lifecycle_v2` and `algorithm_version=v2` identify the current contract. Snapshots also retain ratio, first-seen time, latest age, consistency, confidence components, score caps and display-change values. Old v1 history remains labeled v1; current reads can deterministically reevaluate an old dashboard cache from its validated evidence, preserving its collection timestamp and reporting the upgrade.
 

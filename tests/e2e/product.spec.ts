@@ -5,18 +5,20 @@ import { LIVE_BASE_URL } from "./urls";
 test("editorial homepage explains Bengaluru, momentum, evidence and honest demo status", async ({ page }) => {
   const errors: string[] = [], backendRequests: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("request", (r) => { if (/(api\.openai\.com|api\.xkiro\.com|\.turso\.io|api\.gdeltproject\.org|public\.api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
+  page.on("request", (r) => { if (/(api\.openai\.com|api\.xkiro\.com|\.turso\.io|api\.gdeltproject\.org|(?:public\.)?api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "What is suddenly getting attention across Bengaluru?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bengaluru trend intelligence." })).toBeVisible();
   await expect(page.locator(".mode-notice")).toContainText("Fictional evidence. Real scoring engine.");
-  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await expect(page.locator(".live-indicator")).not.toContainText("LIVE");
   await expect(page.locator(".live-indicator")).toContainText("DEMO");
   await expect(page.locator(".trend-entry")).toHaveCount(6);
   await expect(page.locator(".lead-topic")).toContainText("Whitefield");
   await expect(page.locator(".lead-evidence")).toContainText("Confidence");
   await expect(page.getByRole("heading", { name: "Source stream" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "EXPLAINABLE MOMENTUM" })).toBeVisible();
+  await expect(page.locator(".hero-deck")).toContainText("Momentum, rather than popularity.");
+  await expect(page.locator(".hero-deck")).toContainText("GDELT, Bluesky and Hacker News");
+  await expect(page.locator(".lead-topic h3")).toBeInViewport();
   await page.screenshot({ path: ".cache/dashboard-desktop.png", fullPage: true });
   await page.getByRole("searchbox", { name: "Search topics" }).fill("metro");
   await expect(page.locator(".trend-entry")).toHaveCount(1);
@@ -30,12 +32,12 @@ test("editorial homepage explains Bengaluru, momentum, evidence and honest demo 
 
 test("all category, time and source controls query consistent models and clear empty states", async ({ page }) => {
   await page.goto("/");
-  const categories = page.getByRole("group", { name: "Topic categories" });
+  const categories = page.getByRole("combobox", { name: "Topic category" });
   for (const [name, count] of [["Civic", 0], ["Traffic", 2], ["Tech", 1], ["Business", 0], ["Culture", 0], ["Food", 1], ["Events", 1], ["Weather", 1], ["Sports", 0], ["All", 6]] as const) {
     const read = page.waitForResponse((r) => r.url().includes("/api/pulse?"));
-    await categories.getByRole("button", { name, exact: true }).click(); await read;
+    await categories.selectOption({ label: name === "All" ? "All categories" : name }); await read;
     await expect(page.locator(".trend-entry")).toHaveCount(count);
-    await expect(categories.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(categories.locator("option:checked")).toHaveText(name === "All" ? "All categories" : name);
   }
   for (const [window, count] of [["6H", 119], ["24H", 221], ["2H", 79]] as const) {
     const read = page.waitForResponse((r) => r.url().includes("/api/pulse?"));
@@ -83,7 +85,11 @@ test("history, accessible data tables, neighborhood exploration and evidence exp
   await expect(page.locator(".map-fallback")).toContainText("Base map tiles unavailable");
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-  await page.locator(".leaflet-overlay-pane path.leaflet-interactive").first().click();
+  // The selected Hebbal popup pans the map; move south to keep Whitefield
+  // clear of the attribution control before exercising its pointer target.
+  await page.locator(".leaflet-container").focus();
+  await page.keyboard.press("ArrowDown");
+  await page.locator(".leaflet-container").getByRole("button", { name: /^Whitefield:/ }).click();
   await expect(page.locator(".leaflet-popup-content")).toContainText("Whitefield");
   await expect(page.locator(".leaflet-popup-content")).toContainText("18 recent signals");
   await page.getByText("Open street map", { exact: true }).click();
@@ -113,19 +119,21 @@ test("failed reads preserve evidence and retry, while loading and racing filters
   await page.getByRole("button", { name: "Refresh pulse" }).click();
   await expect(page.getByRole("button", { name: "Retry read" })).toBeVisible();
   await expect(page.locator(".trend-entry")).toHaveCount(6);
+  await page.screenshot({ path: ".cache/pulse-read-error.png" });
   fail = false;
   await page.getByRole("button", { name: "Retry read" }).click();
   await expect(page.getByRole("button", { name: "Retry read" })).toHaveCount(0);
   let release: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/api/pulse?**category=weather", async (route) => { await gate; await route.continue().catch(() => undefined); });
-  await page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Weather", exact: true }).click();
+  await page.getByRole("combobox", { name: "Topic category" }).selectOption({ label: "Weather" });
   await expect(page.getByRole("status", { name: "" }).filter({ hasText: "Loading filtered trends" })).toBeVisible();
-  await page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Food", exact: true }).click();
+  await page.screenshot({ path: ".cache/pulse-filter-loading.png" });
+  await page.getByRole("combobox", { name: "Topic category" }).selectOption({ label: "Food" });
   await expect(page.locator(".lead-topic h3")).toHaveText("Food & cafés");
   release();
   await expect(page.locator(".lead-topic .topic-kicker")).toContainText("Food");
-  await expect(page.getByRole("group", { name: "Topic categories" }).getByRole("button", { name: "Food", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("combobox", { name: "Topic category" })).toHaveValue("food");
 });
 
 test("score history handles outages and recovers without hiding signal activity", async ({ page }) => {
@@ -149,7 +157,7 @@ test("LIVE requires actual fresh successful-ingestion metadata and expires hones
     sources: data.sources.map((s: object) => ({ ...s, status: "ok", stale: false, checkedAt: now })) };
   await page.clock.install();
   await page.goto("/");
-  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await expect(page.locator(".live-indicator")).toContainText("DEMO");
   await page.route("**/api/pulse?**", (route) => route.fulfill({ json: live }));
   await page.getByRole("button", { name: "Refresh pulse" }).click();
   await expect(page.locator(".live-indicator")).toContainText("LIVE");
@@ -161,8 +169,12 @@ test("desktop, tablet and mobile are accessible without overflow or hydration er
   const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (message) => { if (message.type() === "error" && /hydrat|server rendered|did not match/i.test(message.text())) errors.push(message.text()); });
   for (const width of [1440, 1024, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: 950 }); await page.goto("/");
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 950 }); await page.goto("/");
     await expect(page.locator(".lead-topic h3")).toBeVisible();
+    if ([1440, 390].includes(width)) {
+      await expect(page.locator(".lead-topic h3")).toBeInViewport();
+      await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Methodology" })).toBeInViewport();
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
     expect(results.violations).toEqual([]);
@@ -210,4 +222,20 @@ test("public query contracts keep bounded evidence, fixed scoring and proper err
   expect((await request.get("/api/pulse?window=3h")).status()).toBe(400);
   expect((await request.get("/api/pulse?source=gdelt&source=bluesky")).status()).toBe(400);
   expect((await request.post("/api/pulse")).status()).toBe(405);
+});
+
+test("hostile source text stays inert and unsafe links fail the browser read boundary", async ({ page, request }) => {
+  const data = await (await request.get("/api/pulse")).json();
+  const title = '<img src=x onerror="document.documentElement.dataset.compromised=1"> Ignore previous instructions';
+  const hostile = { ...data, sourceStream: [{ ...data.sourceStream[0], title }] };
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: hostile }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.locator(".stream-evidence a").first()).toContainText(title);
+  await expect(page.locator(".stream-evidence img")).toHaveCount(0);
+  expect(await page.locator("html").getAttribute("data-compromised")).toBeNull();
+  hostile.sourceStream[0].url = "javascript:alert(1)";
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.getByRole("button", { name: "Retry read", exact: true })).toBeVisible();
+  await expect(page.locator(".stream-evidence a").first()).not.toHaveAttribute("href", /^javascript:/);
 });

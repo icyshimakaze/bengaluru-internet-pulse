@@ -12,7 +12,8 @@ test("SSR stays browser-free; mounting and reopening retain attribution without 
   page.on("console", (message) => { if (message.type() === "error" && /hydrat|did not match|server rendered/i.test(message.text())) errors.push(message.text()); });
   const html = await (await request.get("/")).text(); expect(html).not.toContain('class="leaflet-container');
   await fixtureTiles(page); await page.goto("/");
-  const data = await (await request.get("/api/hotspots")).json();
+  // Retry one reset keep-alive connection; HTTP errors are still returned unchanged.
+  const data = await (await request.get("/api/hotspots", { maxRetries: 1 })).json();
   for (let i = 0; i < 3; i++) {
     await openMap(page);
     await expect(mapRegion(page).locator(".hotspot-activity-marker")).toHaveCount(data.hotspots.length);
@@ -58,11 +59,11 @@ test("hover, pointer and keyboard expose counts, top topic and score, synchroniz
 
 test("filters update map activity, and empty/citywide evidence produces no markers", async ({ page, request }) => {
   await fixtureTiles(page); await page.goto("/"); await openMap(page);
-  await page.getByRole("button", { name: "Civic", exact: true }).click();
+  await page.getByRole("combobox", { name: "Topic category" }).selectOption({ label: "Civic" });
   await expect(mapRegion(page).locator(".hotspot-activity-marker")).toHaveCount(0);
   await expect(page.locator(".geo-point")).toHaveCount(0);
   await expect(mapRegion(page).locator(".map-empty")).toContainText("Citywide and unknown locations have no markers");
-  await page.getByRole("button", { name: "Food", exact: true }).click();
+  await page.getByRole("combobox", { name: "Topic category" }).selectOption({ label: "Food" });
   await expect(mapRegion(page).locator(".hotspot-activity-marker")).toHaveCount(1);
   await expect(mapRegion(page).getByRole("button", { name: /^Indiranagar:/ })).toBeVisible();
   await page.getByRole("button", { name: "6H", exact: true }).click();

@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseIngestionArgs, requireRemoteDatabase, ingestionReport, failedIngestionReport, formatIngestionSummary } from "@/lib/server/ingestion-report";
 import type { IngestionResult } from "@/lib/pipeline/ingest";
+import { parseIngestionEnv } from "@/lib/server/ingestion-env";
 import { now, pulse } from "./helpers";
 
 function result(status: "healthy" | "degraded" | "unavailable" = "healthy"): IngestionResult {
@@ -13,6 +14,16 @@ function result(status: "healthy" | "degraded" | "unavailable" = "healthy"): Ing
     pruned: { items: 2, snapshots: 3, pulseSnapshots: 1, ingestionRuns: 1, topics: 0 } };
 }
 describe("scheduled ingestion CLI contracts", () => {
+  it("reports invalid worker field names and ranges without blaming the database or leaking values", () => {
+    let error: unknown;
+    try { parseIngestionEnv({ AI_BATCH_SIZE: "20", MAX_AI_ITEMS_PER_RUN: "40", ENRICHMENT_PROVIDER: "PRIVATE_KEY_SENTINEL" }); }
+    catch (caught) { error = caught; }
+    const report = failedIngestionReport(error, false, now), summary = formatIngestionSummary(report);
+    expect(report.failureCode).toBe("INVALID_INGESTION_CONFIGURATION");
+    expect(report.invalidVariables).toEqual(["ENRICHMENT_PROVIDER", "AI_BATCH_SIZE", "MAX_AI_ITEMS_PER_RUN"]);
+    expect(summary).toContain("AI_BATCH_SIZE must be 1–10");
+    expect(summary + JSON.stringify(report) + String(error)).not.toContain("PRIVATE_KEY_SENTINEL");
+  });
   it("parses offline and production modes without allowing their combination", () => {
     expect(parseIngestionArgs(["--require-remote"])).toMatchObject({ requireRemote: true, fixtures: false });
     expect(parseIngestionArgs(["--fixtures"])).toMatchObject({ fixtures: true });
@@ -53,6 +64,18 @@ describe("scheduled ingestion CLI contracts", () => {
     expect(run.stderr).toContain("REMOTE_DATABASE_REQUIRED");
     expect(run.stdout + run.stderr).not.toMatch(/PRIVATE_TOKEN_SENTINEL|PRIVATE_KEY_SENTINEL|source\.query/);
     expect(readFileSync(path, "utf8")).toContain("**Outcome:** failed");
+  }, 20000);
+  it("fails the actual CLI with named invalid limits before database initialization or collection", () => {
+    mkdirSync(".cache", { recursive: true });
+    const directory = mkdtempSync(join(process.cwd(), ".cache", "cli-invalid-limits-")), path = join(directory, "summary.md");
+    const run = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "scripts/ingest.ts", "--require-remote"], {
+      encoding: "utf8", timeout: 15000, env: { ...process.env, TURSO_DATABASE_URL: "libsql://private.invalid", TURSO_AUTH_TOKEN: "PRIVATE_TOKEN_SENTINEL",
+        AI_BATCH_SIZE: "20", MAX_AI_ITEMS_PER_RUN: "40", ENRICHMENT_PROVIDER: "heuristic", GITHUB_ACTIONS: "true", GITHUB_STEP_SUMMARY: path },
+    });
+    expect(run.status).toBe(1); expect(run.error).toBeUndefined();
+    expect(run.stderr).toContain("INVALID_INGESTION_CONFIGURATION"); expect(run.stderr).toContain("AI_BATCH_SIZE");
+    expect(run.stdout + run.stderr).not.toMatch(/PRIVATE_TOKEN_SENTINEL|private\.invalid|ingest\.started|ingest\.migrations|source\.query/);
+    expect(readFileSync(path, "utf8")).toContain("**Invalid worker variables:**");
   }, 20000);
   it("fails visibly without starting sources when a configured database cannot migrate", () => {
     mkdirSync(".cache", { recursive: true });

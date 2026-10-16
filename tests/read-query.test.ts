@@ -8,15 +8,19 @@ import { fromSignal } from "@/lib/db/mapping";
 import { HOUR } from "@/lib/trends/engine";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { seedFixtures } from "@/lib/db/seed";
-vi.mock("next/cache", () => ({ unstable_cache: vi.fn((fn) => fn) }));
+const { cachedReads } = vi.hoisted(() => ({ cachedReads: vi.fn() }));
+vi.mock("next/cache", () => ({ unstable_cache: vi.fn((fn) => (...args: string[]) => { cachedReads(...args); return fn(...args); }) }));
 vi.mock("@/lib/db/client", () => ({ getDatabase: vi.fn() }));
 vi.mock("@/lib/server/env", async (original) => ({ ...await original<typeof import("@/lib/server/env")>(), getEnv: vi.fn() }));
 import { unstable_cache } from "next/cache";
 import { getDatabase } from "@/lib/db/client";
 import { getEnv, parseEnv } from "@/lib/server/env";
 import { readDashboard, readTopics, readTopic, readHealth, ReadUnavailableError } from "@/lib/server/queries";
+import { GET as healthRoute } from "@/app/api/health/route";
+import { GET as pulseRoute } from "@/app/api/pulse/route";
 
 beforeEach(() => {
+  cachedReads.mockClear();
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(now);
   vi.mocked(getEnv).mockReturnValue(parseEnv({ APP_DATA_MODE: "live", TURSO_DATABASE_URL: "file:.data/test.db" }));
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -33,6 +37,27 @@ async function setup() {
   return { repo, signals, reads: new ReadRepository(repo.client) };
 }
 describe("database-backed read service", () => {
+  it("separates persisted caches by database using opaque keys rather than URLs or credentials", async () => {
+    await setup();
+    await readDashboard(); await readTopic(topic.slug);
+    const first = cachedReads.mock.calls[0]![0];
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
+    expect(cachedReads.mock.calls.at(-1)).toEqual([first, topic.slug, now.toISOString()]);
+    vi.mocked(getEnv).mockReturnValue(parseEnv({ APP_DATA_MODE: "live", TURSO_DATABASE_URL: "libsql://different.example", TURSO_AUTH_TOKEN: "PRIVATE_DB_TOKEN" }));
+    await readDashboard();
+    expect(cachedReads.mock.calls.at(-1)![0]).not.toBe(first);
+    expect(JSON.stringify(cachedReads.mock.calls)).not.toMatch(/different\.example|PRIVATE_DB_TOKEN|file:/);
+  });
+  it("preserves retained topic briefs when the latest collection reports complete source failure", async () => {
+    const { repo } = await setup();
+    const stored = (await repo.latest())!;
+    const payload = { ...stored, status: "unavailable", notice: "All sources are currently unavailable." };
+    await repo.client.execute({ sql: "UPDATE pulse_snapshots SET payload=?", args: [JSON.stringify(payload)] });
+    const detail = await readTopic(topic.slug);
+    expect(detail).toMatchObject({ status: "unavailable", notice: "All sources are currently unavailable." });
+    expect(detail?.sourceEvidence).toHaveLength(2);
+    expect(await readTopic("missing-topic")).toBeNull();
+  });
   it("reads persisted semantic categories independently of coarse editorial buckets", async () => {
     const { repo } = await setup();
     const record = (await repo.findTopicBySlug(topic.slug))!;
@@ -56,6 +81,30 @@ describe("database-backed read service", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
     await expect(reads.load(now, "x' OR 1=1 --")).rejects.toThrow(); expect(batch).toHaveBeenCalledTimes(1);
     expect((await reads.health(now)).recentSignalCount).toBe(2);
+  });
+  it("adds only one bounded history query to the shared atomic read for a topic brief", async () => {
+    const { repo } = await setup();
+    const batch = vi.spyOn(repo.client, "batch"), execute = vi.spyOn(repo.client, "execute");
+    const detail = await readTopic(topic.slug);
+    expect(detail?.sourceEvidence).toHaveLength(2);
+    expect(detail?.history).toHaveLength(1);
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0]![0]).toHaveLength(7);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![0]).toMatchObject({ sql: expect.stringContaining("LIMIT 97") });
+  });
+  it("anchors separately loaded history to its parent snapshot and rejects invalid bounds before SQL", async () => {
+    const { repo, reads, signals } = await setup();
+    const record = (await repo.findTopicBySlug(topic.slug))!;
+    await repo.saveSnapshots([60, 30].map((minutes) => topicSnapshot(record.id, signals, new Date(now.getTime() - minutes * 60000))));
+    const ceiling = new Date(now.getTime() - 40 * 60000).toISOString();
+    const history = await reads.loadHistory(now, topic.slug, ceiling);
+    expect(history.history).toHaveLength(1);
+    expect(history.history[0]!.capturedAt).toBe(new Date(now.getTime() - HOUR).toISOString());
+    const execute = vi.spyOn(repo.client, "execute");
+    await expect(reads.loadHistory(now, "bad'slug", ceiling)).rejects.toThrow();
+    await expect(reads.loadHistory(now, topic.slug, new Date(now.getTime() + HOUR).toISOString())).rejects.toThrow("FUTURE_HISTORY_CEILING");
+    expect(execute).not.toHaveBeenCalled();
   });
   it("serves retained inactive topics and versioned history while excluding them from the 2h dashboard", async () => {
     const { repo } = await setup(); vi.setSystemTime(new Date(now.getTime() + 3 * HOUR));
@@ -113,11 +162,30 @@ describe("database-backed read service", () => {
     const repo = testRepository(); await repo.initialize(); vi.mocked(getDatabase).mockReturnValue(repo.client);
     vi.mocked(getEnv).mockReturnValue(parseEnv({ APP_DATA_MODE: "live", TURSO_DATABASE_URL: "file:.data/test.db" }));
     expect((await readHealth()).database.status).toBe("ok"); expect((await readHealth()).status).toBe("unavailable");
+    expect(await readDashboard()).toMatchObject({ mode: "live", generatedAt: null, topTopics: [], sourceStream: [], totalSignals: 0 });
+    const emptyHealth = await healthRoute(); expect(emptyHealth.status).toBe(503);
+    expect(await emptyHealth.json()).toMatchObject({ application: { status: "ok" }, database: { status: "ok" }, recentSignalCount: 0 });
     await repo.client.execute({ sql: "INSERT INTO pulse_snapshots(id,captured_at,mode,payload) VALUES (?,?,?,?)", args: ["corrupt", now.toISOString(), "live", "{}"] });
     expect((await readDashboard()).status).toBe("unavailable"); expect((await readHealth()).database.status).toBe("unavailable");
     vi.mocked(getEnv).mockReturnValue(parseEnv({ APP_DATA_MODE: "demo" }));
     const demo = await readDashboard(); expect(demo.mode).toBe("demo"); expect(demo.topTopics).toHaveLength(6);
     expect((await readHealth()).database.status).toBe("not_required"); expect(demo.lastSuccessfulIngestion).toBeNull();
+  });
+  it.each([undefined, "invalid"])("serves live Vercel reads without usable worker settings (%s)", async (workerSetting) => {
+    const { repo } = await setup();
+    vi.mocked(getEnv).mockReturnValue(parseEnv({ VERCEL: "1", TURSO_DATABASE_URL: "libsql://example.turso.io",
+      TURSO_AUTH_TOKEN: "PRIVATE_DB_TOKEN", ENRICHMENT_PROVIDER: workerSetting, AI_BATCH_SIZE: workerSetting,
+      OPENAI_API_KEY: undefined, XKIRO_API_KEY: undefined }));
+    expect((await pulseRoute()).status).toBe(200);
+    const healthy = await healthRoute(); expect(healthy.status).toBe(200);
+    expect(await healthy.json()).toMatchObject({ mode: "live", database: { status: "ok" }, simulated: false });
+    vi.spyOn(repo.client, "batch").mockRejectedValue(new Error("PRIVATE_DB_TOKEN libsql://private.example"));
+    const failed = await healthRoute(); expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({ application: { status: "ok" }, database: { status: "unavailable" }, recentSignalCount: null });
+    const unavailable = await pulseRoute(); expect(unavailable.status).toBe(503);
+    const data = await unavailable.json(); expect(data).toMatchObject({ mode: "live", topTopics: [], notice: "Live data is temporarily unavailable." });
+    expect(JSON.stringify([data, vi.mocked(console.error).mock.calls])).not.toContain("PRIVATE_DB_TOKEN");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
   it("rejects a valid payload with mismatched snapshot identity instead of leaking a fixture into live mode", async () => {
     const { repo, reads } = await setup();

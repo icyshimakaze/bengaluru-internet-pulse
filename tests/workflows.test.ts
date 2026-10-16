@@ -45,6 +45,8 @@ describe("production ingestion workflow", () => {
     const config = job.steps.find((s) => s.id === "configuration")!;
     for (const name of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]) expect(config.env?.[name]).toBe("${{ secrets." + name + " }}");
     expect(config.env).not.toHaveProperty("OPENAI_API_KEY"); expect(config.env).not.toHaveProperty("XKIRO_API_KEY");
+    expect(config.env?.AI_BATCH_SIZE).toBe("${{ vars.AI_BATCH_SIZE || '10' }}");
+    expect(config.env?.MAX_AI_ITEMS_PER_RUN).toBe("${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}");
     for (const s of job.steps.filter((s) => !["configuration", "ingest"].includes(s.id ?? ""))) expect(JSON.stringify(s)).not.toContain("secrets.");
     expect(source).not.toMatch(/printenv|set -x|continue-on-error|NEXT_PUBLIC_|ready=true/);
     expect(job.steps.some((s) => s.if === "failure()" && s.run?.includes("::error::"))).toBe(true);
@@ -62,7 +64,7 @@ describe("production ingestion workflow", () => {
   it("builds both API selections in CI without any provider secrets or models", () => {
     const ci = parseDocument(readFileSync(".github/workflows/ci.yml", "utf8"));
     const config = z.object({ jobs: z.object({ verify: z.object({ steps: z.array(step) }) }) }).parse(ci.toJS());
-    const builds = config.jobs.verify.steps.filter((s) => s.run === "npm run build");
+    const builds = config.jobs.verify.steps.filter((s) => s.run === "npm run build" && s.env?.ENRICHMENT_PROVIDER);
     expect(builds.map((s) => s.env?.ENRICHMENT_PROVIDER)).toEqual(["xkiro", "openai"]);
     for (const build of builds) {
       for (const name of ["OPENAI_API_KEY", "XKIRO_API_KEY", "OPENAI_MODEL", "XKIRO_BASE_URL", "XKIRO_MODEL"]) {
@@ -71,12 +73,28 @@ describe("production ingestion workflow", () => {
       expect(JSON.stringify(build)).not.toContain("secrets.");
     }
   });
+  it("builds the live Vercel web application with only database settings and the platform flag", () => {
+    const ci = parseDocument(readFileSync(".github/workflows/ci.yml", "utf8"));
+    const config = z.object({ jobs: z.object({ verify: z.object({ steps: z.array(step) }) }) }).parse(ci.toJS());
+    const build = config.jobs.verify.steps.find((s) => s.run === "npm run build" && s.env?.VERCEL);
+    expect(build?.env).toEqual({ VERCEL: "1", TURSO_DATABASE_URL: "libsql://vercel-build.invalid", TURSO_AUTH_TOKEN: "build-only-placeholder" });
+    expect(JSON.stringify(build)).not.toContain("secrets.");
+  });
   it("validates workflow syntax in CI and has no dependency on Vercel cron", () => {
     const ci = parseDocument(readFileSync(".github/workflows/ci.yml", "utf8"));
     expect(ci.errors).toEqual([]);
     const config = z.object({ jobs: z.object({ verify: z.object({ steps: z.array(step) }) }) }).parse(ci.toJS());
-    expect(config.jobs.verify.steps.some((s) => s.uses === "docker://rhysd/actionlint:1.7.12")).toBe(true);
+    expect(config.jobs.verify.steps.some((s) => /^docker:\/\/rhysd\/actionlint@sha256:[a-f0-9]{64}$/.test(s.uses ?? ""))).toBe(true);
     expect(JSON.parse(readFileSync("vercel.json", "utf8"))).not.toHaveProperty("crons");
     expect(source).not.toContain("CRON_SECRET"); expect(source).not.toContain("VERCEL");
+  });
+  it("pins CI dependencies, bounds job runtime and cancels superseded CI work", () => {
+    const ci = z.object({ concurrency: z.object({ group: z.string(), "cancel-in-progress": z.literal(true) }),
+      jobs: z.object({ verify: z.object({ "timeout-minutes": z.number().max(20), steps: z.array(step) }) })
+    }).parse(parseDocument(readFileSync(".github/workflows/ci.yml", "utf8")).toJS());
+    expect(ci.concurrency.group).toContain("github.ref");
+    for (const s of ci.jobs.verify.steps.filter((s) => s.uses)) {
+      expect(s.uses).toMatch(/@[a-f0-9]{40}$|@sha256:[a-f0-9]{64}$/);
+    }
   });
 });

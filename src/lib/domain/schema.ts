@@ -1,28 +1,22 @@
 import { z } from "zod";
 import { enrichmentRunSchema } from "./enrichment-providers";
+import { httpUrlSchema } from "./urls";
+import { sources, sourceTypes, sourceTypeFor } from "./source-labels";
+import { neighborhoods } from "./places";
+export { neighborhoods, coordinates } from "./places";
+export { sources, sourceTypes, sourceTypeFor, sourceNames } from "./source-labels";
+export { httpUrlSchema } from "./urls";
 
-export const sources = ["gdelt", "bluesky", "hackernews"] as const;
 export const sourceSchema = z.enum(sources);
 export type Source = z.infer<typeof sourceSchema>;
-export const sourceTypes = ["news", "social", "tech"] as const;
 export const sourceTypeSchema = z.enum(sourceTypes);
-export const sourceTypeFor: Record<Source, (typeof sourceTypes)[number]> = { gdelt: "news", bluesky: "social", hackernews: "tech" };
-export const sourceNames: Record<Source, string> = { gdelt: "GDELT", bluesky: "Bluesky", hackernews: "Hacker News" };
 export const categories = ["Mobility", "Weather", "Technology", "City life", "Civic"] as const;
 export const categorySchema = z.enum(categories);
-export const neighborhoods = ["Whitefield", "Indiranagar", "Koramangala", "Hebbal", "Electronic City", "Yelahanka", "Jayanagar", "Marathahalli", "HSR Layout", "MG Road"] as const;
 export const neighborhoodSchema = z.enum(neighborhoods);
 export type Neighborhood = z.infer<typeof neighborhoodSchema>;
-// Curated approximate neighborhood centers, never incident coordinates or geocoded source locations.
-export const coordinates: Readonly<Record<Neighborhood, readonly [number, number]>> = {
-  Whitefield: [12.9698, 77.7500], Indiranagar: [12.9784, 77.6408], Koramangala: [12.9352, 77.6245],
-  Hebbal: [13.0354, 77.5988], "Electronic City": [12.8452, 77.6602], Yelahanka: [13.1005, 77.5963],
-  Jayanagar: [12.9250, 77.5938], Marathahalli: [12.9591, 77.6974], "HSR Layout": [12.9116, 77.6389], "MG Road": [12.9756, 77.6066],
-};
 export const slugSchema = z.string().min(1).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 export const lifecycles = ["NEW", "EMERGING", "RISING", "HOT", "STABLE", "COOLING"] as const;
 export const trendLifecycleSchema = z.enum(lifecycles);
-export const httpUrlSchema = z.url().refine((value) => /^https?:\/\//.test(value), "Only HTTP(S) URLs are allowed");
 export const topicSchema = z.object({
   slug: slugSchema, title: z.string().min(3).max(100), category: categorySchema,
   description: z.string().min(1).max(280), method: z.enum(["rules", "ai"]),
@@ -30,12 +24,12 @@ export const topicSchema = z.object({
 });
 export type Topic = z.infer<typeof topicSchema>;
 export const normalizedSignalSchema = z.object({
-  source: sourceSchema, sourceId: z.string().min(1), url: httpUrlSchema, title: z.string().min(3).max(300),
-  excerpt: z.string().min(3).max(4000), publishedAt: z.iso.datetime(), domain: z.string().min(1), sourceType: sourceTypeSchema,
+  source: sourceSchema, sourceId: z.string().min(1).max(2048), url: httpUrlSchema, title: z.string().min(3).max(300),
+  excerpt: z.string().min(3).max(4000), publishedAt: z.iso.datetime(), domain: z.string().min(1).max(253), sourceType: sourceTypeSchema,
 });
 export type NormalizedSignal = z.infer<typeof normalizedSignalSchema>;
 const signalFieldsSchema = normalizedSignalSchema.extend({
-  id: z.string(),
+  id: z.string().min(1).max(200),
   canonicalUrl: httpUrlSchema, contentHash: z.string(), title: z.string().min(3).max(300),
   text: z.string().min(3).max(4000), publishedAt: z.iso.datetime(), collectedAt: z.iso.datetime(),
   timeKind: z.enum(["published", "discovered"]),
