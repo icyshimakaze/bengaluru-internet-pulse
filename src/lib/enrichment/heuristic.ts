@@ -4,6 +4,7 @@ import { type Signal } from "@/lib/domain/schema";
 import type { EnrichmentResult, EnrichmentTopic } from "@/lib/domain/enrichment";
 import type { EnrichmentProvider } from "./types";
 import { validateBatch } from "./validation";
+import { factualSummary } from "./summary";
 import { normalizeText, extractKeywords, tokenOverlap, eventIdentity, eventAnchors, conflictingEvents, namedEventIdentity, dateAnchors, fundingAmount, jobIdentity } from "@/lib/pipeline/matching";
 import { mentionedNeighborhoods, detectBengaluru } from "@/lib/pipeline/location";
 export { normalizeText, extractKeywords, tokenOverlap } from "@/lib/pipeline/matching";
@@ -52,10 +53,6 @@ export function topicSimilarity(title: string, label: string): number {
   const numbers = (words: string[]) => words.filter((w) => /^\d+$/u.test(w)).sort().join("|");
   if (numbers(a) !== numbers(b)) return 0;
   return tokenOverlap(a, b);
-}
-function factualSummary(signal: Signal): string {
-  const fragment = signal.title.split(/[<>\x00-\x1f]/u).find((part) => part.trim().length >= 3) ?? signal.excerpt.split(/[<>\x00-\x1f]/u).find((part) => part.trim().length >= 3) ?? "";
-  return `Public mentions: ${fragment.trim().split(/\s+/u).slice(0, 22).join(" ").slice(0, 260).trim()}`;
 }
 function proposal(signal: Signal, category: EnrichmentResult["category"]) {
   const words = normalizeText(signal.title).match(/[\p{L}\p{N}]+/gu) ?? [];

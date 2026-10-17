@@ -11,6 +11,8 @@ import { parseIngestionEnv as parseEnv } from "@/lib/server/ingestion-env";
 import type { EnrichmentRun, EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
 import { type Signal } from "@/lib/domain/schema";
 import { observation as baseObservation } from "./helpers";
+import { ENRICHMENT_CORE_INSTRUCTIONS } from "@/lib/enrichment/prompt";
+import { factualSummary } from "@/lib/enrichment/summary";
 
 function observation(id: string) {
   const text = "Bengaluru metro delays in Whitefield";
@@ -23,7 +25,9 @@ function item(signal: Signal, patch: Partial<EnrichmentResult> = {}): Enrichment
     summary: `Public mentions: ${signal.title}`, confidence: 0.9, ...patch };
 }
 const response = (items: unknown[]) => ({ status: "completed", output_parsed: { items } });
-const chat = (items: unknown[]) => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ items }) } }] });
+const chat = (items: EnrichmentResult[]) => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({
+  items: items.map(({ summary, ...classification }) => { void summary; return classification; }),
+}) } }] });
 function select(provider: EnrichmentProviderName) {
   vi.stubEnv("ENRICHMENT_PROVIDER", provider); vi.stubEnv("OPENAI_API_KEY", "PRIVATE_OPENAI_KEY");
   vi.stubEnv("XKIRO_API_KEY", "PRIVATE_XKIRO_KEY"); vi.stubEnv("XKIRO_MODEL", "z-ai/test-model");
@@ -70,6 +74,24 @@ describe("three enrichment providers and safe fallback", () => {
     expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("xkiro");
     expect(construct).toHaveBeenCalledTimes(1); expect(construct.mock.calls[0]![0]).toHaveProperty("apiKey", "PRIVATE_XKIRO_KEY");
     expect(parse).not.toHaveBeenCalled();
+  });
+  it("keeps genuine gateway classification and builds its summary exclusively from the original source", async () => {
+    select("xkiro"); const signal = observation("source-summary");
+    create.mockResolvedValue(chat([item(signal, { summary: "An invented assertion the gateway never needs to return." })]));
+    const result = (await classifyAI([signal], [active])).get(signal.id);
+    expect(result).toMatchObject({ provider: "xkiro", model: "z-ai/test-model", result: { summary: factualSummary(signal) } });
+    expect(result?.result.summary).not.toContain("invented");
+  });
+  it("rejects extra generated summary fields in the gateway contract", async () => {
+    select("xkiro"); const signal = observation("unexpected-summary");
+    create.mockResolvedValue({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ items: [item(signal)] }) } }] });
+    expect((await classifyAI([signal], [active])).get(signal.id)?.provider).toBe("heuristic");
+  });
+  it("still rejects unsupported gateway labels atomically after constructing source summaries", async () => {
+    select("xkiro"); const a = observation("a"), b = observation("b");
+    const proposal = { canonical_label: "Whitefield earthquake destroys homes", slug: "whitefield-earthquake", category: "civic" as const };
+    create.mockResolvedValue(chat([item(a), item(b, { ...proposal, existing_topic_id: null, new_topic: proposal })]));
+    expect([...await classifyAI([a, b], [active])].every(([, assignment]) => assignment.provider === "heuristic")).toBe(true);
   });
   it("processes OpenAI without xKiro credentials, a model or a usable base URL", async () => {
     select("openai"); vi.stubEnv("XKIRO_API_KEY", ""); vi.stubEnv("XKIRO_MODEL", "");
@@ -272,7 +294,7 @@ describe("three enrichment providers and safe fallback", () => {
     const request = provider === "openai" ? parse.mock.calls[0]![0] : create.mock.calls[0]![0];
     const instructions = provider === "openai" ? request.instructions : request.messages[0].content;
     const data = JSON.parse(provider === "openai" ? request.input[0].content[0].text : request.messages[1].content);
-    expect(instructions).toContain(ENRICHMENT_INSTRUCTIONS); expect(instructions).not.toContain(injection);
+    expect(instructions).toContain(provider === "openai" ? ENRICHMENT_INSTRUCTIONS : ENRICHMENT_CORE_INSTRUCTIONS); expect(instructions).not.toContain(injection);
     expect(data.signals[0].title).toContain(injection); expect(data.signals[0].excerpt).toHaveLength(1000);
     expect(data.signals[0]).not.toHaveProperty("author"); expect(data.active_topics).toEqual([active]);
     expect(JSON.stringify(request)).not.toMatch(/PRIVATE_OPENAI_KEY|PRIVATE_XKIRO_KEY/);

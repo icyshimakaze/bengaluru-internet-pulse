@@ -4,10 +4,11 @@ import type { Signal } from "@/lib/domain/schema";
 import type { EnrichmentTopic } from "@/lib/domain/enrichment";
 import { withAbort } from "@/lib/sources/http";
 import type { EnrichmentProvider } from "./types";
-import { CHAT_INSTRUCTIONS, enrichmentInput, suppliedCatalog } from "./prompt";
+import { CHAT_INSTRUCTIONS, enrichmentInput, suppliedCatalog, xkiroBatchSchema } from "./prompt";
 import { validateBatch } from "./validation";
 import { enrichmentFetch } from "./transport";
 import { enrichmentDeadlines } from "./limits";
+import { factualSummary } from "./summary";
 
 export class XKiroEnrichmentProvider implements EnrichmentProvider {
   readonly name = "xkiro" as const;
@@ -29,6 +30,13 @@ export class XKiroEnrichmentProvider implements EnrichmentProvider {
       throw new Error("ENRICHMENT_OUTPUT_UNAVAILABLE");
     }
     // Reject prose, markdown fences, partial output and malformed JSON; no paid repair call.
-    return validateBatch(JSON.parse(choice.message.content), signals, catalog);
+    const classified = xkiroBatchSchema.parse(JSON.parse(choice.message.content));
+    const byId = new Map(signals.map((item) => [item.id, item]));
+    const items = classified.items.map((item) => {
+      const source = byId.get(item.signal_id);
+      if (!source) throw new Error("ENRICHMENT_BATCH_IDS");
+      return { ...item, summary: factualSummary(source) };
+    });
+    return validateBatch({ items }, signals, catalog);
   }
 }
