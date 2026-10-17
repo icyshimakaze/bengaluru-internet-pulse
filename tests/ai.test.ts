@@ -28,7 +28,7 @@ function select(provider: EnrichmentProviderName) {
   vi.stubEnv("ENRICHMENT_PROVIDER", provider); vi.stubEnv("OPENAI_API_KEY", "PRIVATE_OPENAI_KEY");
   vi.stubEnv("XKIRO_API_KEY", "PRIVATE_XKIRO_KEY"); vi.stubEnv("XKIRO_MODEL", "z-ai/test-model");
 }
-afterEach(() => { vi.unstubAllEnvs(); parse.mockReset(); create.mockReset(); construct.mockReset(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); parse.mockReset(); create.mockReset(); construct.mockReset(); vi.restoreAllMocks(); });
 
 describe("three enrichment providers and safe fallback", () => {
   it("recovers low-confidence API matches with the genuine heuristic and records actual provenance", async () => {
@@ -55,13 +55,13 @@ describe("three enrichment providers and safe fallback", () => {
     expect(construct).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "PRIVATE_OPENAI_KEY", baseURL: "https://api.openai.com/v1", timeout: 8000, maxRetries: 0, fetch: expect.any(Function) }));
     expect(create).not.toHaveBeenCalled();
   });
-  it.each(["openai/test-model", "z-ai/test-model", "google/test-model"])("preserves xKiro model %s and uses Chat Completions", async (model) => {
+  it.each(["openai/test-model", "z-ai/test-model", "google/test-model", "qwen/qwen3.8-max:free"])("preserves xKiro model %s and uses Chat Completions", async (model) => {
     select("xkiro"); vi.stubEnv("XKIRO_MODEL", model); const signal = observation("a");
     create.mockResolvedValue(chat([item(signal)]));
     expect((await classifyAI([signal], [active])).get(signal.id)).toMatchObject({ provider: "xkiro", model });
     expect(create.mock.calls[0]![0]).toMatchObject({ model, response_format: { type: "json_object" }, max_tokens: 4000,
       stream: false, tools: [], tool_choice: "none" });
-    expect(construct).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "PRIVATE_XKIRO_KEY", baseURL: "https://api.xkiro.com/v1", timeout: 8000, maxRetries: 0, fetch: expect.any(Function) }));
+    expect(construct).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "PRIVATE_XKIRO_KEY", baseURL: "https://api.xkiro.com/v1", timeout: 30000, maxRetries: 0, fetch: expect.any(Function) }));
     expect(parse).not.toHaveBeenCalled();
   });
   it("processes xKiro without an OpenAI key and ignores unused OpenAI configuration", async () => {
@@ -157,6 +157,40 @@ describe("three enrichment providers and safe fallback", () => {
     expect(result.size).toBe(2); expect([...result.values()].every((a) => a.provider === "heuristic")).toBe(true);
     expect(create).toHaveBeenCalledTimes(1);
     expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ fallbackCount: 2, heuristicEnriched: 2 }));
+  });
+  it("accepts a Qwen response after the previous eight-second cutoff", async () => {
+    select("xkiro"); vi.stubEnv("XKIRO_MODEL", "qwen/qwen3.8-max:free"); vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Deadline", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    const signal = observation("slow-qwen"), onReport = vi.fn();
+    create.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(chat([item(signal)])), 12000)));
+    const pending = classifyAI([signal], [active], { onReport });
+    await vi.advanceTimersByTimeAsync(12000);
+    expect((await pending).get(signal.id)).toMatchObject({ provider: "xkiro", model: "qwen/qwen3.8-max:free" });
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ aiEnriched: 1, providerErrors: 0, fallbackCount: 0 }));
+    expect(parse).not.toHaveBeenCalled();
+  });
+  it("bounds slow gateway batches to sixty seconds and recovers the remainder locally", async () => {
+    select("xkiro"); vi.stubEnv("AI_BATCH_SIZE", "1"); vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Deadline", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    const signals = [observation("a"), observation("b"), observation("c"), observation("d")], onReport = vi.fn();
+    create.mockImplementation((request) => {
+      const id = JSON.parse(request.messages[1].content).signals[0].signal_id;
+      return new Promise((resolve) => setTimeout(() => resolve(chat([item(signals.find((s) => s.id === id)!)])), 25000));
+    });
+    const pending = classifyAI(signals, [active], { onReport });
+    await vi.advanceTimersByTimeAsync(60000);
+    const result = await pending;
+    expect([...result.values()].map((a) => a.provider)).toEqual(["xkiro", "xkiro", "heuristic", "heuristic"]);
+    expect(create).toHaveBeenCalledTimes(3); expect(parse).not.toHaveBeenCalled();
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ aiEnriched: 2, heuristicEnriched: 2, fallbackCount: 2 }));
   });
   it("retries a transient OpenAI failure once and retains successful API provenance", async () => {
     select("openai"); const signal = observation("a");
