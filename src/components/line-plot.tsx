@@ -28,6 +28,6 @@ export default memo(function LinePlot({ rows, metric, variant, period = "24h" }:
       cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 4" }}
       contentStyle={{ background: "var(--background)", border: "1px solid var(--border-strong)", borderRadius: 0, boxShadow: "0 6px 20px #252e2910", fontFamily: "var(--font-interface), sans-serif", fontSize: 12, padding: "12px 16px" }} />
     <Line type="linear" dataKey="value" stroke="var(--accent)" strokeWidth={2} dot={snapshot ? rows.length <= 8 ? { r: 3 } : false : rows.length === 1 ? { r: 4 } : false} activeDot={{ r: 5, stroke: "var(--background)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={500} animationEasing="ease-out" />
-    {peak && peak.value > 0 && <ReferenceDot x={peak.at} y={peak.value} r={3} fill="var(--accent)" stroke="var(--background)" label={{ value: `Peak ${peak.value}`, position: "top", fill: "var(--muted-foreground)", fontSize: 10 }} />}
+    {peak && peak.value > 0 && <ReferenceDot x={peak.at} y={peak.value} r={3} fill="var(--accent)" stroke="var(--background)" label={{ value: `Peak ${peak.value}`, position: peak.at === rows.at(-1)?.at ? "left" : "top", fill: "var(--muted-foreground)", fontSize: 10 }} />}
   </LineChart></ResponsiveContainer>;
 });
