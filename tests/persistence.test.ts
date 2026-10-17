@@ -70,7 +70,7 @@ describe("typed relational repositories", () => {
     expect(await repo.findRecentItems({ since: at(1), until: now })).toHaveLength(3);
     expect(await repo.findRecentItems({ since: at(1), until: now, source: "gdelt", limit: 1 })).toHaveLength(1);
     expect(await repo.fetchHotspotActivity({ since: new Date(now.getTime() - 3 * HOUR), until: now })).toEqual([
-      { neighborhood: "Whitefield", lat: 12.9698, lng: 77.75, count: 2, topics: [topic.slug] },
+      { neighborhood: "Whitefield", lat: 12.9696365, lng: 77.7497448, count: 2, topics: [topic.slug] },
     ]);
     await expect(repo.findRecentItems({ since: now, until: at(1) })).rejects.toThrow();
   });

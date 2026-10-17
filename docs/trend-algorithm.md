@@ -1,5 +1,7 @@
 # Deterministic trend algorithm — v3
 
+Portfolio evidence update: optional RSS shares the news channel with GDELT/Currents. Up to five provider labels still produce exactly three scoring channels. Content-rule-filtered items (including Jobs) are retained but excluded before the unchanged deterministic equation. No weights, component equations, caps, confidence or lifecycle thresholds changed, and historical snapshots are preserved. Neighborhood coordinate eligibility affects only maps. See [sources](data-sources.md) for filter limitations and [evaluation](evaluation.md) for pending human measurement.
+
 The engine measures momentum from distinct public signals. An injected UTC clock and fixed equations determine every metric, score, confidence, lifecycle and tie. OpenAI/mock classification confidence is never a scoring input. Pending, failed and irrelevant items are excluded.
 
 ## Evidence and time windows

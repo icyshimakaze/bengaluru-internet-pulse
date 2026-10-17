@@ -5,7 +5,7 @@ import { mentionedNeighborhoods } from "@/lib/pipeline/location";
 import { extractKeywords, conflictingEvents } from "@/lib/pipeline/matching";
 export { enrichmentProviderSchema } from "./enrichment-providers";
 
-export const semanticCategories = ["civic", "traffic", "technology", "business", "culture", "food", "events", "weather", "sports", "other"] as const;
+export const semanticCategories = ["civic", "traffic", "technology", "business", "culture", "food", "events", "weather", "sports", "other", "jobs"] as const;
 export const semanticCategorySchema = z.enum(semanticCategories);
 export const semanticNeighborhoodSchema = z.enum(["Citywide", "Unknown", ...neighborhoods]);
 const label = z.string().min(3).max(100).regex(/^[^<>\x00-\x1f]+$/);
@@ -28,7 +28,7 @@ export const PRODUCTION_MODEL = "gpt-6-luna" as const;
 export type EnrichmentAssignment = { result: EnrichmentResult; topic: EnrichmentTopic | null; provider: EnrichmentProviderName; model: string | null };
 export const editorialCategory: Record<EnrichmentResult["category"], Topic["category"]> = {
   civic: "Civic", traffic: "Mobility", technology: "Technology", business: "Technology",
-  culture: "City life", food: "City life", events: "City life", weather: "Weather", sports: "City life", other: "City life",
+  culture: "City life", food: "City life", events: "City life", weather: "Weather", sports: "City life", other: "City life", jobs: "City life",
 };
 export const legacySemanticCategory: Record<Topic["category"], EnrichmentResult["category"]> = {
   Civic: "civic", Mobility: "traffic", Technology: "technology", Weather: "weather", "City life": "other",

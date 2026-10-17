@@ -1,5 +1,7 @@
 # Production scheduled ingestion
 
+Current default: set repository Variable `ENRICHMENT_PROVIDER=heuristic`. An absent Variable now selects heuristic too. xKiro/OpenAI remain optional with their existing credentials/models and fallback behavior. Worker Variable `RSS_ENABLED` defaults to `false`; review the two configured feeds' unchecked terms before opting in. Earlier xKiro-default statements below describe previous configuration and are superseded here.
+
 `.github/workflows/ingest.yml` runs the existing server-only CLI on GitHub-hosted Ubuntu with Node.js 22. It supports `workflow_dispatch` and the UTC cron expression `17,47 * * * *`. The schedule is also at minutes 17 and 47 in IST. `vercel.json` contains no cron; Vercel serves the read/UI layer, and ingestion does not need a site URL.
 
 The Vercel live web deployment requires only `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`; live mode defaults from Vercel's platform flag. Keep provider keys, model/provider selection, enrichment limits and source settings in Actions. The web environment parser does not validate those worker settings. The ingestion parser runs only when the worker or optional authenticated HTTP ingestion is explicitly invoked. The workflow applies database migrations before collection, so run it against the shared database to initialize the first deployment.

@@ -14,6 +14,7 @@ import { collectionState, type CollectionRecord } from "@/lib/domain/source-heal
 import { activityWindows, meaningfulWindow } from "@/lib/trends/window-selection";
 import { leadEligible } from "@/lib/trends/lead-eligibility";
 import { detectLanguage } from "@/lib/domain/language";
+import { filterSignal } from "@/lib/ingestion/filters.config";
 
 export const STALE_MS = 90 * 60000;
 const order = (a: PublicTopic, b: PublicTopic) => b.score - a.score || b.velocity - a.velocity || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
@@ -42,14 +43,17 @@ export function demoReadState(now: Date, slug?: string): ReadState {
       undefined, undefined, toDomainTopic(descriptor))) : [] };
 }
 export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now: Date, mode: Pulse["mode"], collections: CollectionRecord[] = []) {
-  const latestCoreAttempt = [...stored.filter((s) => s.source !== "currents").map((s) => s.checkedAt),
-    ...collections.filter((c) => c.health.source !== "currents").map((c) => c.lastAttemptAt),
-    ...runs.filter((r) => r.source !== "currents").map((r) => r.startedAt)].sort().at(-1);
-  const currentsAttempt = [...collections.filter((c) => c.health.source === "currents").map((c) => c.lastAttemptAt),
-    ...runs.filter((r) => r.source === "currents").map((r) => r.startedAt)].sort().at(-1);
+  const optional = (source: Source) => source === "currents" || source === "rss";
+  const latestCoreAttempt = [...stored.filter((s) => !optional(s.source)).map((s) => s.checkedAt),
+    ...collections.filter((c) => !optional(c.health.source)).map((c) => c.lastAttemptAt),
+    ...runs.filter((r) => !optional(r.source)).map((r) => r.startedAt)].sort().at(-1);
   // Read only persisted configuration/evidence; web reads never inspect API keys.
-  const configured = sources.filter((source) => source !== "currents" || mode !== "demo" && (stored.some((s) => s.source === source)
-    || currentsAttempt !== undefined && (latestCoreAttempt === undefined || currentsAttempt >= latestCoreAttempt)));
+  const configured = sources.filter((source) => {
+    const attempt = [...collections.filter((c) => c.health.source === source).map((c) => c.lastAttemptAt),
+      ...runs.filter((r) => r.source === source).map((r) => r.startedAt)].sort().at(-1);
+    return !optional(source) || mode !== "demo" && (stored.some((s) => s.source === source)
+      || attempt !== undefined && (latestCoreAttempt === undefined || attempt >= latestCoreAttempt));
+  });
   return configured.map((source) => {
     const storedSource = stored.find((s) => s.source === source), run = runs.find((r) => r.source === source);
     let health: SourceStatus = storedSource ?? { source, status: "unavailable", fetched: 0, accepted: 0, rejected: 0,
@@ -91,6 +95,8 @@ function publicSignal(item: ItemRecord, topics: ReadonlyMap<string, ReadState["t
     url: item.originalUrl, title: item.title, excerpt: item.excerpt.slice(0, 600), domain: item.domain, publishedAt: item.publishedAt,
     timeKind: item.timeKind, topicSlug: topics.get(item.topicId ?? "")?.slug ?? null, neighborhood: item.neighborhood,
     language: detectLanguage(`${item.title} ${item.excerpt}`),
+    filterReason: item.filterReason ?? filterSignal(item), publisherName: item.publisherName ?? null,
+    ...(item.filterReason === "job_posting" || filterSignal(item) === "job_posting" ? { observedCategory: "jobs" } : {}),
     enrichmentStatus: item.enrichmentStatus, enrichmentProvider: item.enrichmentProvider });
 }
 function selected(evidence: readonly Observation[], query: ReadQuery, now: Date) {
@@ -120,13 +126,13 @@ export function metricTopics(state: ReadState, query: ReadQuery, now: Date) {
 function hotspotRows(topics: ReturnType<typeof metricTopics>, query: ReadQuery, now: Date) {
   const groups = new Map<string, { evidence: Observation[]; topics: Map<string, PublicTopic> }>();
   for (const t of topics) for (const o of selected(t.evidence, query, now)) {
-    if (!o.neighborhood) continue;
+    if (!o.neighborhood || !coordinates[o.neighborhood]) continue;
     const group = groups.get(o.neighborhood) ?? { evidence: [] as Observation[], topics: new Map<string, PublicTopic>() };
     group.evidence.push(o); group.topics.set(t.public.slug, t.public); groups.set(o.neighborhood, group);
   }
   return [...groups].map(([neighborhood, group]) => {
     const ranked = [...group.topics.values()].sort(order), top = ranked[0]!, count = group.evidence.length;
-    const [lat, lng] = coordinates[group.evidence[0]!.neighborhood!];
+    const [lat, lng] = coordinates[group.evidence[0]!.neighborhood!]!;
     return publicHotspotSchema.parse({ neighborhood, lat, lng, count, activity: count, topics: ranked.map((t) => t.slug),
       averagePulse: Math.round(ranked.reduce((sum, t) => sum + t.score, 0) / ranked.length * 10) / 10,
       topPulse: top.score, topTopic: { slug: top.slug, title: top.title, pulseScore: top.score } });
@@ -179,12 +185,13 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
   // The same connected-identity dedupe protects pending stream rows and ranked evidence.
   const streams = deduplicateEvidence(state.items.filter((i) => i.enrichmentStatus !== "irrelevant" && (i.enrichmentStatus !== "completed" || i.localRelevance >= 0.5))
     .map((i) => ({ id: i.id, source: i.source, sourceId: i.sourceId, url: i.originalUrl, canonicalUrl: i.canonicalUrl, title: i.title,
-      excerpt: i.excerpt, text: i.excerpt, domain: i.domain, sourceType: i.source === "gdelt" ? "news" as const : i.source === "bluesky" ? "social" as const : "tech" as const,
+      excerpt: i.excerpt, text: i.excerpt, domain: i.domain, sourceType: sourceTypeFor[i.source],
       publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind,
       topicSlug: topicsById.get(i.topicId ?? "")?.slug ?? "unenriched", neighborhood: i.neighborhood })), now);
   const stream = selected(streams, query, now).filter((o) => {
     if (!query.category) return true;
     const item = byId.get(o.id)!, topic = topicsById.get(item.topicId ?? "");
+    if ((item.filterReason ?? filterSignal(item)) === "job_posting") return query.category === "jobs";
     return topic && (topic.category === query.category || (state.semanticCategories[topic.id] ?? legacySemanticCategory[topic.category]) === query.category);
   })
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));

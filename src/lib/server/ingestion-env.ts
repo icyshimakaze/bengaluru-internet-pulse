@@ -6,7 +6,7 @@ const blankToUndefined = (v: unknown) => typeof v === "string" && !v.trim() ? un
 const optional = z.preprocess(blankToUndefined, z.string().optional());
 const withDefault = (value: string) => z.preprocess(blankToUndefined, z.string().default(value));
 export const ingestionVariableNames = ["CRON_SECRET", "OPENAI_API_KEY", "OPENAI_MODEL", "XKIRO_API_KEY", "XKIRO_BASE_URL", "XKIRO_MODEL",
-  "ENRICHMENT_PROVIDER", "ENRICHMENT_ENABLED", "AI_BATCH_SIZE", "MAX_AI_ITEMS_PER_RUN", "SOURCE_TIMEOUT_MS", "CURRENTS_API_KEY", "CURRENTS_ENABLED"] as const;
+  "ENRICHMENT_PROVIDER", "ENRICHMENT_ENABLED", "AI_BATCH_SIZE", "MAX_AI_ITEMS_PER_RUN", "SOURCE_TIMEOUT_MS", "CURRENTS_API_KEY", "CURRENTS_ENABLED", "RSS_ENABLED"] as const;
 type IngestionVariable = (typeof ingestionVariableNames)[number];
 export class IngestionEnvironmentError extends Error {
   constructor(readonly fields: IngestionVariable[], messages: string[] = []) {
@@ -19,6 +19,7 @@ const schema = z.object({
   CRON_SECRET: optional.refine((v) => !v || v.length >= 32, "CRON_SECRET must be at least 32 characters"),
   CURRENTS_API_KEY: z.preprocess(blankToUndefined, z.string().trim().min(1).max(4096).regex(/^[\x21-\x7e]+$/, "Use the raw key without spaces or a Bearer prefix").optional()),
   CURRENTS_ENABLED: z.preprocess(blankToUndefined, z.enum(["auto", "true", "false"]).default("auto")),
+  RSS_ENABLED: z.preprocess(blankToUndefined, z.enum(["true", "false"]).default("false")).transform((v) => v === "true"),
   // Only the selected provider validates its key/model/URL at construction.
   // Missing credentials retain the existing genuine heuristic fallback.
   OPENAI_API_KEY: optional, OPENAI_MODEL: withDefault("gpt-6-luna"),

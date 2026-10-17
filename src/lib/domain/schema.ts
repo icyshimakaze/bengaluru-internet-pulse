@@ -26,6 +26,7 @@ export type Topic = z.infer<typeof topicSchema>;
 export const normalizedSignalSchema = z.object({
   source: sourceSchema, sourceId: z.string().min(1).max(2048), url: httpUrlSchema, title: z.string().min(3).max(300),
   excerpt: z.string().min(3).max(4000), publishedAt: z.iso.datetime(), domain: z.string().min(1).max(253), sourceType: sourceTypeSchema,
+  publisherName: z.string().min(1).max(100).optional(),
 });
 export type NormalizedSignal = z.infer<typeof normalizedSignalSchema>;
 const signalFieldsSchema = normalizedSignalSchema.extend({

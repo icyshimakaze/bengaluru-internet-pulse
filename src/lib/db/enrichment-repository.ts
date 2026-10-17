@@ -7,6 +7,7 @@ import { storedEnrichmentProviderSchema, enrichmentProviderSchema, validProvider
 import { itemRecordSchema, type ItemRecord, type TopicRecord } from "./records";
 import { itemInsert, itemFromRow, toSignal } from "./mapping";
 import { writeTransaction, DAY } from "./data-repository";
+import { filterSignal } from "@/lib/ingestion/filters.config";
 
 export const enrichmentRecordSchema = z.object({
   itemId: z.string().min(1).max(200), provider: storedEnrichmentProviderSchema, model: modelIdSchema.nullable(),
@@ -22,6 +23,15 @@ async function verifyLease(tx: Transaction, owner: string, now: Date) {
 
 export class EnrichmentRepository {
   constructor(readonly client: Client) {}
+  async recordFilters(items: ItemRecord[], owner: string, now: Date) {
+    const valid = z.array(itemRecordSchema).max(10000).parse(items);
+    const rows = valid.map((item) => ({ item, reason: filterSignal(item) })).filter(({ item, reason }) => reason || item.filterReason);
+    await writeTransaction(this.client, async (tx) => {
+      await verifyLease(tx, owner, now);
+      if (rows.length) await tx.batch(rows.map(({ item, reason }) => ({ sql: "UPDATE items SET filter_reason=? WHERE id=? AND is_fixture=?",
+        args: [reason, item.id, Number(item.isFixture)] })));
+    });
+  }
   async collectPending(items: ItemRecord[], owner: string, now: Date): Promise<number> {
     const valid = items.map((i) => itemRecordSchema.parse(i));
     if (valid.some((i) => i.enrichmentStatus !== "pending" || i.topicId !== null || i.category !== null)) throw new Error("COLLECTION_REQUIRES_PENDING_ITEMS");
@@ -47,7 +57,7 @@ export class EnrichmentRepository {
     z.date().parse(now); z.boolean().parse(isFixture); z.number().int().min(1).max(30).parse(limit);
     return writeTransaction(this.client, async (tx) => {
       await verifyLease(tx, owner, now);
-      const rows = await tx.execute({ sql: `SELECT * FROM items WHERE is_fixture=? AND enrichment_status IN ('pending','failed')
+      const rows = await tx.execute({ sql: `SELECT * FROM items WHERE is_fixture=? AND filter_reason IS NULL AND enrichment_status IN ('pending','failed')
         AND published_at>=? AND published_at<=? AND enrichment_attempts<3 AND (enrichment_attempted_at IS NULL OR enrichment_attempted_at<=?)
         ORDER BY enrichment_attempts ASC,published_at DESC,id ASC LIMIT ?`, args: [Number(isFixture), new Date(now.getTime() - DAY).toISOString(), now.toISOString(),
         new Date(now.getTime() - 15 * 60000).toISOString(), limit] });
@@ -65,7 +75,7 @@ export class EnrichmentRepository {
   }
   async pendingForRecovery(now: Date, isFixture: boolean, excluded: string[]): Promise<ItemRecord[]> {
     z.date().parse(now); z.boolean().parse(isFixture); z.array(z.string().min(1)).max(30).parse(excluded);
-    const rows = await this.client.execute({ sql: `SELECT * FROM items WHERE is_fixture=?
+    const rows = await this.client.execute({ sql: `SELECT * FROM items WHERE is_fixture=? AND filter_reason IS NULL
       AND enrichment_status IN ('pending','failed') AND published_at<=?
       AND id NOT IN (SELECT value FROM json_each(?))
       ORDER BY published_at ASC,id ASC LIMIT 500`, args: [Number(isFixture), now.toISOString(), JSON.stringify(excluded)] });

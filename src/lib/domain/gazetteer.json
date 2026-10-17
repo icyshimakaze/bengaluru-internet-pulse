@@ -1,0 +1,1066 @@
+{
+  "Whitefield": {
+    "aliases": [
+      "Whitefield"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9696365,
+      77.7497448
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/relation/19883364",
+    "verifiedAt": "2026-10-18"
+  },
+  "Indiranagar": {
+    "aliases": [
+      "Indiranagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9732913,
+      77.6404672
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/node/448991617",
+    "verifiedAt": "2026-10-18"
+  },
+  "Koramangala": {
+    "aliases": [
+      "Koramangala"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9357366,
+      77.624081
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/node/429918282",
+    "verifiedAt": "2026-10-18"
+  },
+  "Hebbal": {
+    "aliases": [
+      "Hebbal"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      13.0382184,
+      77.5919
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/relation/19883365",
+    "verifiedAt": "2026-10-18"
+  },
+  "Electronic City": {
+    "aliases": [
+      "Electronic City",
+      "Electronics City",
+      "E City",
+      "E-City"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.8436448,
+      77.6686835
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/node/12123440858",
+    "verifiedAt": "2026-10-18"
+  },
+  "Yelahanka": {
+    "aliases": [
+      "Yelahanka"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      13.1006982,
+      77.5963454
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/node/430143744",
+    "verifiedAt": "2026-10-18"
+  },
+  "Jayanagar": {
+    "aliases": [
+      "Jayanagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9292731,
+      77.5824229
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/node/429853334",
+    "verifiedAt": "2026-10-18"
+  },
+  "Marathahalli": {
+    "aliases": [
+      "Marathahalli",
+      "Marathalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9552572,
+      77.6984163
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/relation/19884550",
+    "verifiedAt": "2026-10-18"
+  },
+  "HSR Layout": {
+    "aliases": [
+      "HSR Layout",
+      "HSR",
+      "H S R Layout"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "verified",
+    "coordinates": [
+      12.9116225,
+      77.6388622
+    ],
+    "coordinateSource": "https://www.openstreetmap.org/relation/17168010",
+    "verifiedAt": "2026-10-18"
+  },
+  "MG Road": {
+    "aliases": [
+      "MG Road",
+      "M G Road",
+      "Mahatma Gandhi Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Malleshwaram": {
+    "aliases": [
+      "Malleshwaram",
+      "Malleswaram"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Rajajinagar": {
+    "aliases": [
+      "Rajajinagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Basavanagudi": {
+    "aliases": [
+      "Basavanagudi",
+      "Basavangudi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Banashankari": {
+    "aliases": [
+      "Banashankari"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "JP Nagar": {
+    "aliases": [
+      "JP Nagar",
+      "J P Nagar",
+      "Jayaprakash Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "BTM Layout": {
+    "aliases": [
+      "BTM Layout",
+      "BTM"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bellandur": {
+    "aliases": [
+      "Bellandur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sarjapur Road": {
+    "aliases": [
+      "Sarjapur Road"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sarjapur": {
+    "aliases": [
+      "Sarjapur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Domlur": {
+    "aliases": [
+      "Domlur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Ulsoor": {
+    "aliases": [
+      "Ulsoor",
+      "Halasuru"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Frazer Town": {
+    "aliases": [
+      "Frazer Town",
+      "Fraser Town",
+      "Pulakeshinagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Cox Town": {
+    "aliases": [
+      "Cox Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Richmond Town": {
+    "aliases": [
+      "Richmond Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Cooke Town": {
+    "aliases": [
+      "Cooke Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Benson Town": {
+    "aliases": [
+      "Benson Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Shivajinagar": {
+    "aliases": [
+      "Shivajinagar",
+      "Shivaji Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Vasanth Nagar": {
+    "aliases": [
+      "Vasanth Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sadashivanagar": {
+    "aliases": [
+      "Sadashivanagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Seshadripuram": {
+    "aliases": [
+      "Seshadripuram"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Majestic": {
+    "aliases": [
+      "Majestic"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Gandhinagar": {
+    "aliases": [
+      "Gandhinagar"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Chamrajpet": {
+    "aliases": [
+      "Chamrajpet"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Vijayanagar": {
+    "aliases": [
+      "Vijayanagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Nagarbhavi": {
+    "aliases": [
+      "Nagarbhavi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kengeri": {
+    "aliases": [
+      "Kengeri",
+      "Kengeri Satellite Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kumaraswamy Layout": {
+    "aliases": [
+      "Kumaraswamy Layout"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Padmanabhanagar": {
+    "aliases": [
+      "Padmanabhanagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Uttarahalli": {
+    "aliases": [
+      "Uttarahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Girinagar": {
+    "aliases": [
+      "Girinagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hanumanth Nagar": {
+    "aliases": [
+      "Hanumanth Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Vidyaranyapura": {
+    "aliases": [
+      "Vidyaranyapura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sahakar Nagar": {
+    "aliases": [
+      "Sahakar Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sanjay Nagar": {
+    "aliases": [
+      "Sanjay Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "RT Nagar": {
+    "aliases": [
+      "RT Nagar",
+      "R T Nagar",
+      "Rabindranath Tagore Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Ganganagar": {
+    "aliases": [
+      "Ganganagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Mathikere": {
+    "aliases": [
+      "Mathikere"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Yeshwanthpur": {
+    "aliases": [
+      "Yeshwanthpur",
+      "Yeshwantpur",
+      "Yeswanthpur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Jalahalli": {
+    "aliases": [
+      "Jalahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Peenya": {
+    "aliases": [
+      "Peenya"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Dasarahalli": {
+    "aliases": [
+      "Dasarahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Nagasandra": {
+    "aliases": [
+      "Nagasandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hesaraghatta": {
+    "aliases": [
+      "Hesaraghatta"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Doddaballapur": {
+    "aliases": [
+      "Doddaballapur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bagalur": {
+    "aliases": [
+      "Bagalur"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Thanisandra": {
+    "aliases": [
+      "Thanisandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hennur": {
+    "aliases": [
+      "Hennur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Horamavu": {
+    "aliases": [
+      "Horamavu"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Banaswadi": {
+    "aliases": [
+      "Banaswadi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kammanahalli": {
+    "aliases": [
+      "Kammanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kalyan Nagar": {
+    "aliases": [
+      "Kalyan Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Ramamurthy Nagar": {
+    "aliases": [
+      "Ramamurthy Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "KR Puram": {
+    "aliases": [
+      "KR Puram",
+      "K R Puram",
+      "Krishnarajapuram",
+      "Krishnarajapura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kasturi Nagar": {
+    "aliases": [
+      "Kasturi Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "CV Raman Nagar": {
+    "aliases": [
+      "CV Raman Nagar",
+      "C V Raman Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Baiyappanahalli": {
+    "aliases": [
+      "Baiyappanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Benniganahalli": {
+    "aliases": [
+      "Benniganahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Mahadevapura": {
+    "aliases": [
+      "Mahadevapura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Doddanekundi": {
+    "aliases": [
+      "Doddanekundi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Brookefield": {
+    "aliases": [
+      "Brookefield",
+      "Brookfield"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kundalahalli": {
+    "aliases": [
+      "Kundalahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "AECS Layout": {
+    "aliases": [
+      "AECS Layout"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Varthur": {
+    "aliases": [
+      "Varthur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Gunjur": {
+    "aliases": [
+      "Gunjur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kadugodi": {
+    "aliases": [
+      "Kadugodi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Belathur": {
+    "aliases": [
+      "Belathur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Channasandra": {
+    "aliases": [
+      "Channasandra"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hoodi": {
+    "aliases": [
+      "Hoodi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "ITPL": {
+    "aliases": [
+      "ITPL",
+      "International Tech Park Bangalore"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Panathur": {
+    "aliases": [
+      "Panathur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Balagere": {
+    "aliases": [
+      "Balagere"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kadubeesanahalli": {
+    "aliases": [
+      "Kadubeesanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Devarabisanahalli": {
+    "aliases": [
+      "Devarabisanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kaikondrahalli": {
+    "aliases": [
+      "Kaikondrahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kasavanahalli": {
+    "aliases": [
+      "Kasavanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Harlur": {
+    "aliases": [
+      "Harlur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kudlu": {
+    "aliases": [
+      "Kudlu"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Singasandra": {
+    "aliases": [
+      "Singasandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Begur": {
+    "aliases": [
+      "Begur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bommanahalli": {
+    "aliases": [
+      "Bommanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hongasandra": {
+    "aliases": [
+      "Hongasandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Garvebhavi Palya": {
+    "aliases": [
+      "Garvebhavi Palya"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hosur Road": {
+    "aliases": [
+      "Hosur Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Chandapura": {
+    "aliases": [
+      "Chandapura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Anekal": {
+    "aliases": [
+      "Anekal"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Attibele": {
+    "aliases": [
+      "Attibele"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Jigani": {
+    "aliases": [
+      "Jigani"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bommasandra": {
+    "aliases": [
+      "Bommasandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bannerghatta": {
+    "aliases": [
+      "Bannerghatta"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Gottigere": {
+    "aliases": [
+      "Gottigere"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Hulimavu": {
+    "aliases": [
+      "Hulimavu"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Arekere": {
+    "aliases": [
+      "Arekere"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Bilekahalli": {
+    "aliases": [
+      "Bilekahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Dollars Colony": {
+    "aliases": [
+      "Dollars Colony"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Wilson Garden": {
+    "aliases": [
+      "Wilson Garden"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Shanti Nagar": {
+    "aliases": [
+      "Shanti Nagar"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Langford Town": {
+    "aliases": [
+      "Langford Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Austin Town": {
+    "aliases": [
+      "Austin Town"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Neelasandra": {
+    "aliases": [
+      "Neelasandra"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Adugodi": {
+    "aliases": [
+      "Adugodi"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Ejipura": {
+    "aliases": [
+      "Ejipura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Vivek Nagar": {
+    "aliases": [
+      "Vivek Nagar"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Victoria Layout": {
+    "aliases": [
+      "Victoria Layout"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Ashok Nagar": {
+    "aliases": [
+      "Ashok Nagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Cubbon Park": {
+    "aliases": [
+      "Cubbon Park"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Church Street": {
+    "aliases": [
+      "Church Street"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Residency Road": {
+    "aliases": [
+      "Residency Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Cunningham Road": {
+    "aliases": [
+      "Cunningham Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Infantry Road": {
+    "aliases": [
+      "Infantry Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kasturba Road": {
+    "aliases": [
+      "Kasturba Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Richmond Road": {
+    "aliases": [
+      "Richmond Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Race Course Road": {
+    "aliases": [
+      "Race Course Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Lavelle Road": {
+    "aliases": [
+      "Lavelle Road"
+    ],
+    "requiresCityContext": true,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "New BEL Road": {
+    "aliases": [
+      "New BEL Road"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Devanahalli": {
+    "aliases": [
+      "Devanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Jakkur": {
+    "aliases": [
+      "Jakkur"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Amruthahalli": {
+    "aliases": [
+      "Amruthahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kodigehalli": {
+    "aliases": [
+      "Kodigehalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Byatarayanapura": {
+    "aliases": [
+      "Byatarayanapura"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Sampigehalli": {
+    "aliases": [
+      "Sampigehalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Nagavara": {
+    "aliases": [
+      "Nagavara"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Manyata Tech Park": {
+    "aliases": [
+      "Manyata Tech Park",
+      "Manyata",
+      "Manyatha Tech Park"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Chikkabanavara": {
+    "aliases": [
+      "Chikkabanavara"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Soladevanahalli": {
+    "aliases": [
+      "Soladevanahalli"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Rajanukunte": {
+    "aliases": [
+      "Rajanukunte"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Yelahanka New Town": {
+    "aliases": [
+      "Yelahanka New Town"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Kamakshipalya": {
+    "aliases": [
+      "Kamakshipalya"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Basaveshwaranagar": {
+    "aliases": [
+      "Basaveshwaranagar"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Laggere": {
+    "aliases": [
+      "Laggere"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  },
+  "Nandini Layout": {
+    "aliases": [
+      "Nandini Layout"
+    ],
+    "requiresCityContext": false,
+    "coordinateStatus": "coordinates_unverified"
+  }
+}

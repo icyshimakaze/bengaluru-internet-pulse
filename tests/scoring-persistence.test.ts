@@ -21,7 +21,7 @@ describe("versioned scoring persistence", () => {
     await repo.client.batch([topicInsert(record, { legacy: true }), ...items.map(itemInsert), snapshotInsert(original, { legacy: true })], "write");
     const ledger = (await repo.client.execute("SELECT * FROM schema_migrations ORDER BY version")).rows;
     const before = (await repo.client.execute("SELECT * FROM topic_snapshots")).rows[0]!;
-    expect(await repo.initialize()).toEqual({ applied: [5, 6, 7, 8, 9], version: 9 });
+    expect(await repo.initialize()).toEqual({ applied: [5, 6, 7, 8, 9, 10], version: 10 });
     expect((await repo.client.execute("SELECT * FROM schema_migrations WHERE version<=4 ORDER BY version")).rows).toEqual(ledger);
     const after = (await repo.client.execute("SELECT * FROM topic_snapshots")).rows[0]!;
     for (const key of Object.keys(before)) expect(after[key]).toEqual(before[key]);

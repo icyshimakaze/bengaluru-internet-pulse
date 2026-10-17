@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC fixture. No real articles or publishers. -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Fictional Bengaluru paper</title>
+<item><title>Bengaluru synthetic metro report</title><link>https://example.org/metro</link><pubDate>Tue, 06 Oct 2026 10:00:00 GMT</pubDate><description><![CDATA[<p>Short fictional report &amp; source link.</p>]]></description><content:encoded>DO NOT RETAIN FULL BODY</content:encoded></item>
+<item><title>Invalid date</title><link>https://example.org/no-date</link></item>
+<item><title>Unsafe link</title><link>javascript:alert(1)</link><pubDate>Tue, 06 Oct 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>

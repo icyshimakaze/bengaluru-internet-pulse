@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC fixture. -->
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Fictional feed</title>
+<entry><title>Bengaluru synthetic civic report</title><id>urn:synthetic:1</id><link rel="self" href="https://example.org/api/1"/><link rel="alternate" href="https://example.org/civic"/><published>2026-10-06T15:30:00+05:30</published><summary>Fictional short civic metadata.</summary><author><name>PRIVATE AUTHOR</name></author><content>FULL BODY MUST NOT SURVIVE</content></entry>
+<entry><title>Nonlocal discussion</title><link href="https://example.org/nonlocal"/><published>2026-10-06T10:00:00Z</published><summary>A report from London.</summary></entry>
+</feed>

@@ -1,6 +1,30 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test("RSS provenance, Jobs exclusions and local language badges remain accessible", async ({ page, request }) => {
+  const stored = await (await request.get("/api/pulse")).json(), checkedAt = new Date().toISOString();
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: { ...stored, mode: "live", status: "healthy", stale: false, generatedAt: checkedAt,
+      lastSuccessfulIngestion: checkedAt, notice: null, topTopics: [], risingTopics: [], recentConversations: [],
+      filters: { category: params.get("category"), source: params.get("source") },
+      sources: [...stored.sources, { ...stored.sources[0], source: "rss", status: "ok", healthState: "live", stale: false, checkedAt, lastSuccessAt: checkedAt }],
+      sourceStream: [{ ...stored.sourceStream[0], source: "rss", sourceType: "news", language: "Kannada",
+        title: "SYNTHETIC fixture: ಬೆಂಗಳೂರು #Hiring", filterReason: "job_posting", observedCategory: "jobs", publisherName: "Synthetic local paper" }],
+    } });
+  });
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await page.getByLabel("Filter by source").selectOption("rss");
+  await page.getByLabel("Topic category").selectOption("jobs");
+  await expect(page.locator(".stream-list")).toContainText("Synthetic local paper");
+  await expect(page.locator(".stream-list")).toContainText("Jobs · excluded from momentum");
+  await expect(page.locator(".stream-list .language-badge")).toHaveText("Kannada");
+  await expect(page.locator(".lead-topic")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 900 });
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
+});
+
 test("keyed Currents renders as a fourth news provider with attribution and accessible mobile controls", async ({ page, request }) => {
   const stored = await (await request.get("/api/pulse")).json();
   const checkedAt = new Date().toISOString();

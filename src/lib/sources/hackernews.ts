@@ -23,11 +23,13 @@ export function createHackerNewsAdapter(transport: Transport = fetchJson, option
       if (!parsed.success && !comment.success) return null;
       if (comment.success) {
         const d = comment.data;
+        if (!/\b(bengaluru|bangalore|bmrcl|bbmp|bwssb|namma metro)\b/iu.test(`${d.story_title} ${d.comment_text}`)) return null;
         return normalize({ source: "hackernews", sourceId: d.objectID, url: `https://news.ycombinator.com/item?id=${d.objectID}`,
           title: `Discussion: ${d.story_title}`, text: d.comment_text, publishedAt: d.created_at }, now);
       }
       if (!parsed.success) return null;
       const d = parsed.data;
+      if (!/\b(bengaluru|bangalore|bmrcl|bbmp|bwssb|namma metro)\b/iu.test(`${d.title} ${d.story_text ?? ""}`)) return null;
       return normalize({ source: "hackernews", sourceId: d.objectID, url: `https://news.ycombinator.com/item?id=${d.objectID}`,
         contentUrl: d.url ?? undefined, title: d.title, text: d.story_text ?? undefined, publishedAt: d.created_at }, now);
     },

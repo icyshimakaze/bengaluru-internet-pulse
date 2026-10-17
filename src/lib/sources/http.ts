@@ -4,11 +4,12 @@ import { z } from "zod";
 import { errorCode, log } from "@/lib/server/logger";
 import { httpUrlSchema, sourceSchema, type Source } from "@/lib/domain/schema";
 
-export type TransportOptions = { timeoutMs?: number; signal?: AbortSignal; source?: Source; queryId?: string; minIntervalMs?: number; init?: RequestInit };
+export type TransportOptions = { timeoutMs?: number; signal?: AbortSignal; source?: Source; queryId?: string; minIntervalMs?: number; init?: RequestInit; responseFormat?: "json" | "text" };
 type Options = TransportOptions & { attempts?: number; fetcher?: typeof fetch; init?: RequestInit };
 export type Transport = (url: string, options?: TransportOptions) => Promise<unknown>;
 export const RESPONSE_LIMIT_BYTES = 2 * 1024 * 1024;
 const settings = z.object({ timeoutMs: z.number().int().min(1).max(15000).default(8000), attempts: z.number().int().min(1).max(3).default(2),
+  responseFormat: z.enum(["json", "text"]).default("json"),
   source: sourceSchema.optional(), queryId: z.string().max(80).optional(), minIntervalMs: z.number().int().min(0).max(10000).default(0) });
 const nextRequestAt = new Map<string, number>();
 
@@ -30,7 +31,7 @@ function retryDelay(value: string | null, fallback: number): number {
 }
 export async function fetchJson(url: string, options: Options = {}): Promise<unknown> {
   httpUrlSchema.parse(url);
-  const { timeoutMs, attempts, source, queryId, minIntervalMs } = settings.parse(options);
+  const { timeoutMs, attempts, source, queryId, minIntervalMs, responseFormat } = settings.parse(options);
   const fetcher = options.fetcher ?? fetch, init = options.init ?? {};
   const parent = options.signal ?? init.signal;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -46,7 +47,7 @@ export async function fetchJson(url: string, options: Options = {}): Promise<unk
     const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(parent ? [parent] : [])]);
     try {
       const headers = new Headers(init.headers);
-      headers.set("Accept", "application/json");
+      headers.set("Accept", responseFormat === "text" ? "application/rss+xml, application/atom+xml, text/xml, text/plain;q=0.9" : "application/json");
       const response = await withAbort(fetcher(url, { ...init, redirect: "error", cache: "no-store", credentials: "omit", signal, headers }), signal);
       if (!response.ok) {
         backoff = retryDelay(response.headers.get("retry-after"), backoff);
@@ -72,7 +73,7 @@ export async function fetchJson(url: string, options: Options = {}): Promise<unk
         if (!finished) void reader.cancel().catch(() => {});
         reader.releaseLock();
       }
-      return JSON.parse(body) as unknown;
+      return responseFormat === "text" ? body : JSON.parse(body) as unknown;
     } catch (error) {
       if (parent?.aborted) throw parent.reason;
       const code = error instanceof Error ? error.message : "";

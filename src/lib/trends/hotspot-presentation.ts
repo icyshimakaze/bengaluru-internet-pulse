@@ -3,8 +3,10 @@ import type { PublicHotspot } from "@/lib/domain/read-models";
 
 /** Keep unsupported/empty locations off both maps. Only curated centers determine position. */
 export function activeHotspots(hotspots: readonly PublicHotspot[]): PublicHotspot[] {
-  return hotspots.filter((h) => h.activity > 0 && Object.hasOwn(coordinates, h.neighborhood))
-    .map((h) => ({ ...h, lat: coordinates[h.neighborhood][0], lng: coordinates[h.neighborhood][1] }));
+  return hotspots.flatMap((h) => {
+    const center = coordinates[h.neighborhood];
+    return h.activity > 0 && center ? [{ ...h, lat: center[0], lng: center[1] }] : [];
+  });
 }
 
 /** Screen-pixel radius encodes activity; restrained emerald opacity encodes top topic intensity. */

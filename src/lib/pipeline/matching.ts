@@ -18,6 +18,7 @@ export function normalizeText(value: string): string {
 }
 export function extractKeywords(value: string): string[] {
   let text = normalizeText(value);
+  if (/\b(cricket|t20i?|odi|ipl|test match)\b/u.test(text)) text = text.replace(/\b(?:washed out|called off|abandon(?:ed|ment)?|without a ball|no play)\b/gu, "washout").replace(/\bt20i\b/gu, "t20");
   if (/\b(funding|investment|million|billion|ventures)\b|\$\d/u.test(text)) text = text.replace(/\b(raises|raised|raising|secures|secured)\b/gu, "funding");
   const words = text.match(/[\p{L}\p{N}]+/gu) ?? [];
   return [...new Set(words.filter((w) => !stopWords.has(w) && (w.length >= 3 || /^\d+$/u.test(w)))
@@ -27,6 +28,23 @@ export function tokenOverlap(a: string[], b: string[]): number {
   const left = new Set(a), right = new Set(b);
   const intersection = [...left].filter((t) => right.has(t)).length;
   return intersection / Math.max(1, new Set([...left, ...right]).size);
+}
+/** Conservative event entity set. A generic match/rain mention cannot merge. */
+export function cricketIdentity(text: string): { teams: string; format: string; action: string; women: boolean } | null {
+  const value = normalizeText(text);
+  if (!/\b(cricket|t20i?|odi|ipl|test match)\b/u.test(value)) return null;
+  const teams = [
+    ["india", /\bindia\b/u], ["south-africa", /\b(south africa|proteas|sa)\b/u],
+    ["australia", /\baustralia\b/u], ["england", /\bengland\b/u], ["new-zealand", /\b(new zealand|black caps|nz)\b/u],
+    ["pakistan", /\bpakistan\b/u], ["sri-lanka", /\bsri lanka\b/u], ["bangladesh", /\bbangladesh\b/u],
+    ["rcb", /\b(rcb|royal challengers)\b/u], ["csk", /\b(csk|chennai super kings)\b/u],
+    ["mumbai-indians", /\bmumbai indians\b/u], ["kkr", /\b(kkr|kolkata knight riders)\b/u],
+  ] as const;
+  const entities = teams.filter(([, pattern]) => pattern.test(value)).map(([key]) => key).sort();
+  if (entities.length !== 2) return null;
+  const format = value.match(/\b(t20i?|odi|ipl|test match)\b/u)?.[0]?.replace("t20i", "t20") ?? "cricket";
+  const action = /\b(washout|washed out|called off|abandon\w*|no play|without a ball)\b/u.test(value) ? "washout" : null;
+  return action ? { teams: entities.join(":"), format, action, women: /\bwomen\b/u.test(value) } : null;
 }
 const eventTerms = new Set(["delay", "closure", "outage", "strike", "extension", "launch", "funding", "festival", "concert", "flood", "rain", "shortage", "accident", "protest"]);
 const months = "january february march april may june july august september october november december".split(" ");

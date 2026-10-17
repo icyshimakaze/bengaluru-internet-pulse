@@ -169,10 +169,12 @@ export class DataRepository {
       FROM items i JOIN topics t ON t.id=i.topic_id WHERE i.is_fixture=? AND i.published_at>? AND i.published_at<=?
       AND i.neighborhood IS NOT NULL AND i.local_relevance>=0.5 AND i.enrichment_status='completed' GROUP BY i.neighborhood ORDER BY count DESC,i.neighborhood ASC`,
       args: [Number(q.isFixture), iso(q.since), iso(q.until)] });
-    return result.rows.map((r) => {
+    return result.rows.flatMap((r) => {
       const neighborhood = neighborhoodSchema.parse(r.neighborhood);
-      const [lat, lng] = coordinates[neighborhood];
-      return hotspotSchema.parse({ neighborhood, lat, lng, count: r.count, topics: JSON.parse(String(r.topics)) });
+      const center = coordinates[neighborhood];
+      if (!center) return [];
+      const [lat, lng] = center;
+      return [hotspotSchema.parse({ neighborhood, lat, lng, count: r.count, topics: JSON.parse(String(r.topics)) })];
     });
   }
 

@@ -149,6 +149,6 @@ describe("production deterministic momentum v3", () => {
   it("only maps deduplicated explicitly located current two-hour evidence", () => {
     const input = [observation("a", 0.5), observation("b", 1), observation("boundary", 2), observation("old", 4)].map((o) => ({ ...o, neighborhood: "Whitefield" as const }));
     const trends = computeTrends([topic], input, now);
-    expect(computeHotspots([...trends, ...trends], now)).toEqual([{ neighborhood: "Whitefield", lat: 12.9698, lng: 77.75, count: 2, topics: [topic.slug] }]);
+    expect(computeHotspots([...trends, ...trends], now)).toEqual([{ neighborhood: "Whitefield", lat: 12.9696365, lng: 77.7497448, count: 2, topics: [topic.slug] }]);
   });
 });

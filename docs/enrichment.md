@@ -1,5 +1,11 @@
 # Semantic enrichment: OpenAI, xKiro and heuristic
 
+**Current default (18 October 2026): heuristic.** Production should set the GitHub Actions repository Variable `ENRICHMENT_PROVIDER=heuristic` unless a working xKiro key and entitled vendor/model are configured. An absent Variable now also defaults to heuristic. OpenAI and xKiro clients, vendor IDs, strict batch validation and heuristic-only API fallback remain supported. Earlier deployment-selection statements below are historical configuration guidance, superseded by this default.
+
+The semantic taxonomy additionally supports `jobs`; rule-filtered recruitment evidence is retained in the Jobs stream and excluded before scoring/enrichment. Dominant sports/event terms take precedence over incidental rain; T20/T20I/ODI/IPL are Sports. Existing categories retain their names.
+
+Cricket washout clustering uses normalized token sets plus exactly two matching team entities, format, action, explicit date conflicts and women's-match guards. In-batch proposals require source timestamps within 12 hours; the existing active catalog is bounded to 24 hours by storage and has no timestamp field in the unchanged provider interface. Without explicit dates, recurring events within that catalog can still be ambiguous. Batch ordering uses original timestamps/IDs for repeatability, not polling time. Other event guards and the >=0.75 lexical fallback remain. Synthetic paraphrase/conflict tests do not establish real matching accuracy. Locality matching now uses the [140-entry gazetteer](neighborhoods.md); unverified centers stay off maps.
+
 All three server-only adapters implement `EnrichmentProvider.enrich(signals, activeTopics, context)` and return the same `EnrichmentResult[]`. `getEnrichmentProvider()` selects a provider using `ENRICHMENT_PROVIDER`; unknown names cause a clear configuration error. OpenAI support is retained. Switching APIs requires environment changes only.
 
 | Provider | Implementation | Credentials and model |

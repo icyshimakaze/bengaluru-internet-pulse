@@ -15,7 +15,8 @@ const fixture = () => projectDashboard(demoReadState(FIXTURE_NOW), { window: "2h
 
 describe("curated hotspot presentation", () => {
   it("covers only supported neighborhoods with approximate Bengaluru centers", () => {
-    expect(Object.keys(coordinates).sort()).toEqual([...neighborhoods].sort());
+    expect(Object.keys(coordinates).every((name) => (neighborhoods as readonly string[]).includes(name))).toBe(true);
+    expect(Object.hasOwn(coordinates, "MG Road")).toBe(false);
     for (const [lat, lng] of Object.values(coordinates)) {
       expect(lat).toBeGreaterThan(12.8); expect(lat).toBeLessThan(13.2);
       expect(lng).toBeGreaterThan(77.5); expect(lng).toBeLessThan(77.8);
@@ -28,7 +29,7 @@ describe("curated hotspot presentation", () => {
     expect(activeHotspots([{ ...h, activity: 0 }])).toEqual([]);
     expect(activeHotspots([{ ...h, neighborhood: "Citywide" } as unknown as PublicHotspot,
       { ...h, neighborhood: "Unknown" } as unknown as PublicHotspot])).toEqual([]);
-    expect(activeHotspots([{ ...h, lat: 0, lng: 0 }])[0]).toMatchObject({ lat: coordinates[h.neighborhood][0], lng: coordinates[h.neighborhood][1] });
+    expect(activeHotspots([{ ...h, lat: 0, lng: 0 }])[0]).toMatchObject({ lat: coordinates[h.neighborhood]![0], lng: coordinates[h.neighborhood]![1] });
     expect(h.lat).not.toBe(0);
   });
   it("encodes activity with bounded size and intensity independently with opacity", () => {

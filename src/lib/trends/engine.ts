@@ -125,7 +125,9 @@ export function computeHotspots(trends: readonly Trend[], now: Date): Hotspot[] 
   for (const o of deduplicateEvidence(trends.flatMap((t) => t.evidence), now)) {
     if (!o.neighborhood || Date.parse(o.publishedAt) <= now.getTime() - 2 * HOUR) continue;
     const location = o.neighborhood;
-    const point = map.get(location) ?? { neighborhood: location, lat: coordinates[location][0], lng: coordinates[location][1], count: 0, topics: [] };
+    const center = coordinates[location];
+    if (!center) continue;
+    const point = map.get(location) ?? { neighborhood: location, lat: center[0], lng: center[1], count: 0, topics: [] };
     point.count++;
     if (!point.topics.includes(o.topicSlug)) point.topics.push(o.topicSlug);
     map.set(location, point);

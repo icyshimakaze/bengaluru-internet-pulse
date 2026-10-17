@@ -1,5 +1,7 @@
 # Architecture
 
+Current portfolio update: heuristic is the default in both local and scheduled ingestion; production should explicitly set the repository Variable to heuristic unless a working API provider is configured. Optional RSS adds a fifth provider to the existing news channel, without changing score weights or the three-channel denominator. Rule-filtered evidence is retained with reasons and excluded before enrichment/scoring. Migration 0010 preserves existing provider/model provenance and historical scoring rows. See [source contracts](data-sources.md), [enrichment](enrichment.md) and [localities](neighborhoods.md); older deployment-selection paragraphs below are historical.
+
 ## Product contract
 
 "The city's internet, compressed into one pulse."

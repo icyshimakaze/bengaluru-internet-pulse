@@ -1,13 +1,15 @@
 import "server-only";
 import type { Row, InStatement } from "@libsql/client";
 import { sourceTypeFor, type Topic, type Signal, type Observation } from "@/lib/domain/schema";
+import { filterSignal } from "@/lib/ingestion/filters.config";
 import { itemRecordSchema, topicRecordSchema, snapshotRecordSchema, ingestionRunSchema, legacyLifecycle, type ItemRecord, type TopicRecord, type SnapshotRecord, type IngestionRun } from "./records";
 
 export function itemFromRow(r: Row): ItemRecord {
   return itemRecordSchema.parse({ id: r.id, source: r.source, sourceId: r.source_id, canonicalUrl: r.canonical_url, originalUrl: r.original_url,
     title: r.title, excerpt: r.excerpt, domain: r.domain, publishedAt: r.published_at, collectedAt: r.collected_at, contentFingerprint: r.content_fingerprint,
     topicId: r.topic_id, category: r.category, neighborhood: r.neighborhood, localRelevance: r.local_relevance,
-    enrichmentStatus: r.enrichment_status, enrichmentProvider: r.enrichment_provider ?? null, timeKind: r.time_kind, ingestionRunId: r.ingestion_run_id, isFixture: r.is_fixture === 1 });
+    enrichmentStatus: r.enrichment_status, enrichmentProvider: r.enrichment_provider ?? null, timeKind: r.time_kind, ingestionRunId: r.ingestion_run_id, isFixture: r.is_fixture === 1,
+    filterReason: r.filter_reason ?? filterSignal({ title: String(r.title), excerpt: String(r.excerpt), canonicalUrl: String(r.canonical_url) }), publisherName: r.publisher_name ?? null });
 }
 export function topicFromRow(r: Row): TopicRecord {
   return topicRecordSchema.parse({ id: r.id, slug: r.slug, canonicalLabel: r.canonical_label, category: r.category, neighborhood: r.neighborhood,
@@ -32,27 +34,30 @@ export function toDomainTopic(t: TopicRecord): Topic { return { slug: t.slug, ti
 export function toSignal(i: ItemRecord): Signal {
   return { id: i.id, source: i.source, sourceId: i.sourceId, canonicalUrl: i.canonicalUrl, url: i.originalUrl, title: i.title, text: i.excerpt,
     excerpt: i.excerpt, domain: i.domain, sourceType: sourceTypeFor[i.source],
-    publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind };
+    publishedAt: i.publishedAt, collectedAt: i.collectedAt, contentHash: i.contentFingerprint, timeKind: i.timeKind,
+    ...(i.publisherName ? { publisherName: i.publisherName } : {}) };
 }
 export function toObservations(items: ItemRecord[], topics: TopicRecord[]): Observation[] {
   const slugs = new Map(topics.map((t) => [t.id, t.slug]));
   return items.flatMap((i) => {
     const topicSlug = i.topicId ? slugs.get(i.topicId) : undefined;
-    return topicSlug && i.enrichmentStatus === "completed" && i.localRelevance >= 0.5 ? [{ ...toSignal(i), topicSlug, neighborhood: i.neighborhood }] : [];
+    return topicSlug && !i.filterReason && !filterSignal(i) && i.enrichmentStatus === "completed" && i.localRelevance >= 0.5 ? [{ ...toSignal(i), topicSlug, neighborhood: i.neighborhood }] : [];
   });
 }
-export function fromSignal(signal: Signal, fields: Partial<Pick<ItemRecord, "topicId" | "category" | "neighborhood" | "localRelevance" | "enrichmentStatus" | "enrichmentProvider" | "ingestionRunId" | "isFixture">> = {}): ItemRecord {
+export function fromSignal(signal: Signal, fields: Partial<Pick<ItemRecord, "topicId" | "category" | "neighborhood" | "localRelevance" | "enrichmentStatus" | "enrichmentProvider" | "ingestionRunId" | "isFixture" | "filterReason">> = {}): ItemRecord {
   return itemRecordSchema.parse({ id: signal.id, source: signal.source, sourceId: signal.sourceId, canonicalUrl: signal.canonicalUrl, originalUrl: signal.url,
     title: signal.title, excerpt: signal.text, domain: new URL(signal.canonicalUrl).hostname, publishedAt: signal.publishedAt, collectedAt: signal.collectedAt,
     contentFingerprint: signal.contentHash, timeKind: signal.timeKind, topicId: null, category: null, neighborhood: null,
-    localRelevance: 0, enrichmentStatus: "pending", ingestionRunId: null, isFixture: false, ...fields });
+    localRelevance: 0, enrichmentStatus: "pending", ingestionRunId: null, isFixture: false,
+    filterReason: filterSignal({ ...signal, canonicalUrl: signal.canonicalUrl }), publisherName: signal.publisherName ?? null, ...fields });
 }
 export function itemInsert(i: ItemRecord): InStatement {
   const v = itemRecordSchema.parse(i);
-  return { sql: `INSERT INTO items(id,source,source_id,canonical_url,original_url,title,excerpt,domain,published_at,collected_at,content_fingerprint,topic_id,category,neighborhood,local_relevance,enrichment_status,time_kind,ingestion_run_id,is_fixture${v.enrichmentProvider === null ? "" : ",enrichment_provider"})
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?${v.enrichmentProvider === null ? "" : ",?"}) ON CONFLICT DO NOTHING RETURNING *`,
+  const extra = [...(v.filterReason ? ["filter_reason"] : []), ...(v.publisherName ? ["publisher_name"] : [])];
+  return { sql: `INSERT INTO items(id,source,source_id,canonical_url,original_url,title,excerpt,domain,published_at,collected_at,content_fingerprint,topic_id,category,neighborhood,local_relevance,enrichment_status,time_kind,ingestion_run_id,is_fixture${v.enrichmentProvider === null ? "" : ",enrichment_provider"}${extra.map((c) => "," + c).join("")})
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?${v.enrichmentProvider === null ? "" : ",?"}${extra.map(() => ",?").join("")}) ON CONFLICT DO NOTHING RETURNING *`,
     args: [v.id, v.source, v.sourceId, v.canonicalUrl, v.originalUrl, v.title, v.excerpt, v.domain, v.publishedAt, v.collectedAt, v.contentFingerprint,
-      v.topicId, v.category, v.neighborhood, v.localRelevance, v.enrichmentStatus, v.timeKind, v.ingestionRunId, Number(v.isFixture), ...(v.enrichmentProvider === null ? [] : [v.enrichmentProvider])] };
+      v.topicId, v.category, v.neighborhood, v.localRelevance, v.enrichmentStatus, v.timeKind, v.ingestionRunId, Number(v.isFixture), ...(v.enrichmentProvider === null ? [] : [v.enrichmentProvider]), ...(v.filterReason ? [v.filterReason] : []), ...(v.publisherName ? [v.publisherName] : [])] };
 }
 export function topicInsert(t: TopicRecord, options: { legacy?: boolean } = {}): InStatement {
   const v = topicRecordSchema.parse(t);

@@ -22,9 +22,9 @@ export function emptyDashboardState(pulse: DashboardData, filtered: boolean) {
 }
 export const categoryLabels: Record<PublicTopic["semanticCategory"], string> = {
   civic: "Civic", traffic: "Traffic", technology: "Tech", business: "Business", culture: "Culture",
-  food: "Food", events: "Events", weather: "Weather", sports: "Sports", other: "Other",
+  food: "Food", events: "Events", weather: "Weather", sports: "Sports", other: "Other", jobs: "Jobs",
 };
-export const filterCategories = ["civic", "traffic", "technology", "business", "culture", "food", "events", "weather", "sports"] as const;
+export const filterCategories = ["civic", "traffic", "technology", "business", "culture", "food", "events", "weather", "sports", "jobs"] as const;
 export type PulseMetadata = Pick<DashboardData, "mode" | "status" | "stale" | "lastSuccessfulIngestion" | "evaluatedAt"> & {
   snapshot: Pick<DashboardData["snapshot"], "refreshDelayed">;
   sources?: DashboardData["sources"]; enrichment?: DashboardData["enrichment"]; generatedAt?: string | null; totalSignals?: number;

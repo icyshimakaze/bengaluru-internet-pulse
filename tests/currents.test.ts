@@ -169,10 +169,10 @@ describe("Currents database upgrade and scoring", () => {
     for (const [index, table] of tables.entries()) {
       expect((await repo.client.execute(`SELECT * FROM ${table}`)).rows.map((r) => ({ ...r }))).toEqual(before[index]);
     }
-    expect(await repo.initialize()).toEqual({ applied: [8, 9], version: 9 });
+    expect(await repo.initialize()).toEqual({ applied: [8, 9, 10], version: 10 });
     for (const [index, table] of tables.entries()) {
       const after = (await repo.client.execute(`SELECT * FROM ${table}${table === "schema_migrations" ? " WHERE version<=7" : ""}`)).rows.map((r) => ({ ...r }));
-      expect(after).toEqual(table === "source_collections" ? before[index]!.map((r) => ({ ...r, consecutive_failures: 0 })) : before[index]);
+      expect(after).toEqual(table === "source_collections" ? before[index]!.map((r) => ({ ...r, consecutive_failures: 0 })) : table === "items" ? before[index]!.map((r) => ({ ...r, filter_reason: null, publisher_name: null })) : before[index]);
     }
     const currentsRun = await repo.startIngestionRun("currents", now, false);
     await repo.insertItem(fromSignal(observation("new-currents", 0.1, "currents"), { ingestionRunId: currentsRun.id }));
@@ -183,7 +183,7 @@ describe("Currents database upgrade and scoring", () => {
     await expect(repo.insertItem(fromSignal(observation("wrong-run", 0.1, "currents"), { ingestionRunId: run.id }))).rejects.toThrow();
     await expect(repo.client.execute({ sql: "INSERT INTO ingestion_runs(id,source,started_at) VALUES (?,?,?)", args: ["bad-source", "unknown", now.toISOString()] })).rejects.toThrow();
     expect((await repo.client.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
-    expect(await repo.initialize()).toEqual({ applied: [], version: 9 });
+    expect(await repo.initialize()).toEqual({ applied: [], version: 10 });
   });
 
   it("counts four providers but three channels, and never treats two news indexes as cross-channel support", () => {

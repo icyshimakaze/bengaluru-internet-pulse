@@ -66,7 +66,8 @@ jobs:
           # The key alone activates Currents; no repository variable is required.
           CURRENTS_ENABLED: auto
           APP_DATA_MODE: live
-          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
+          ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'heuristic' }}
+          RSS_ENABLED: ${{ vars.RSS_ENABLED || 'false' }}
           ENRICHMENT_ENABLED: ${{ vars.ENRICHMENT_ENABLED || 'true' }}
           # Empty model/base URL variables use application defaults; only the selected provider is validated.
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { categorySchema, neighborhoodSchema, sourceSchema, httpUrlSchema, slugSchema, trendLifecycleSchema } from "@/lib/domain/schema";
 import { storedEnrichmentProviderSchema } from "@/lib/domain/enrichment-providers";
+import { filterReasonSchema } from "@/lib/ingestion/filters.config";
 
 const timestamp = z.iso.datetime().transform((value) => new Date(value).toISOString());
 const id = z.string().min(1).max(200);
@@ -25,6 +26,7 @@ export const itemFieldsSchema = z.object({
   localRelevance: factor, enrichmentStatus: enrichmentStatusSchema, timeKind: z.enum(["published", "discovered"]),
   ingestionRunId: id.nullable(), isFixture: z.boolean(),
   enrichmentProvider: storedEnrichmentProviderSchema.nullable().default(null),
+  filterReason: filterReasonSchema.nullable().optional(), publisherName: z.string().min(1).max(100).nullable().optional(),
 });
 export const itemRecordSchema = itemFieldsSchema.refine((v) => v.collectedAt >= v.publishedAt, "Collection cannot precede publication")
   .refine((v) => v.enrichmentStatus !== "completed" || (v.topicId !== null && v.category !== null), "Completed items need a topic and category")
@@ -42,7 +44,7 @@ export const topicUpdateSchema = topicFieldsSchema.partial().omit({ id: true, is
 export type TopicUpdate = z.infer<typeof topicUpdateSchema>;
 export const snapshotRecordSchema = z.object({
   topicId: id, capturedAt: timestamp, count2h: count, previousCount2h: count, count6h: count, count24h: count,
-  sourceCount: count.max(4), velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor,
+  sourceCount: count.max(5), velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor,
   confidence: factor, pulseScore: z.number().int().min(0).max(100), lifecycle: lifecycleSchema,
   count3h: count, previousCount3h: count, scoringSourceCount: count.max(3), algorithmVersion: z.enum(["v1", "v2", "v3"]), batchId: id.nullable(),
   growthRatio: z.number().positive().optional(), latestSignalAgeHours: z.number().nonnegative().nullable().optional(), firstSeenAt: timestamp.nullable().optional(),

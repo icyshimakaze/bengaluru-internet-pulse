@@ -99,7 +99,7 @@ export class Repository extends DataRepository {
       const pulse = pulseSchema.parse({ ...template, generatedAt: capturedAt, trends, hotspots: computeHotspots(trends, captured),
         totalSignals: evidence.filter((o) => Date.parse(o.publishedAt) >= captured.getTime() - 24 * HOUR).length });
       if (pulse.enrichment) {
-        const recent = storedItems.filter((i) => Date.parse(i.publishedAt) >= captured.getTime() - DAY);
+        const recent = storedItems.filter((i) => !i.filterReason && Date.parse(i.publishedAt) >= captured.getTime() - DAY);
         pulse.enrichment = { ...pulse.enrichment, pending: recent.filter((i) => i.enrichmentStatus === "pending" || i.enrichmentStatus === "failed").length,
           completed: recent.filter((i) => i.enrichmentStatus === "completed").length, irrelevant: recent.filter((i) => i.enrichmentStatus === "irrelevant").length };
         if (pulse.enrichment.pending) {

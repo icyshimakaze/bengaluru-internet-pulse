@@ -1,0 +1,153 @@
+# Neighborhood gazetteer
+
+140 locality names with explicit aliases. Matching uses Unicode word boundaries. Ambiguous roads/names require explicit Bengaluru context; multiple mentions remain Unknown. Coordinates are OSM locality centers, never incident locations.
+
+Nine centers were verified by paced Nominatim queries on 18 October 2026. Station and apartment matches were rejected. Overpass endpoints returned HTTP 502/500. Missing coordinates are explicitly `coordinates_unverified` and are excluded from maps. No runtime geocoder is used.
+
+## Verified centers
+
+- [Indiranagar](https://www.openstreetmap.org/node/448991617): 12.9732913, 77.6404672
+- [Koramangala](https://www.openstreetmap.org/node/429918282): 12.9357366, 77.624081
+- [Hebbal](https://www.openstreetmap.org/relation/19883365): 13.0382184, 77.5919
+- [Yelahanka](https://www.openstreetmap.org/node/430143744): 13.1006982, 77.5963454
+- [Jayanagar](https://www.openstreetmap.org/node/429853334): 12.9292731, 77.5824229
+- [Marathahalli](https://www.openstreetmap.org/relation/19884550): 12.9552572, 77.6984163
+- [HSR Layout](https://www.openstreetmap.org/relation/17168010): 12.9116225, 77.6388622
+- [Whitefield](https://www.openstreetmap.org/relation/19883364): 12.9696365, 77.7497448
+- [Electronic City](https://www.openstreetmap.org/node/12123440858): 12.8436448, 77.6686835
+
+## TODO(author): verify these coordinates
+
+- MG Road - coordinates_unverified
+- Malleshwaram - coordinates_unverified
+- Rajajinagar - coordinates_unverified
+- Basavanagudi - coordinates_unverified
+- Banashankari - coordinates_unverified
+- JP Nagar - coordinates_unverified
+- BTM Layout - coordinates_unverified
+- Bellandur - coordinates_unverified
+- Sarjapur Road - coordinates_unverified
+- Sarjapur - coordinates_unverified
+- Domlur - coordinates_unverified
+- Ulsoor - coordinates_unverified
+- Frazer Town - coordinates_unverified
+- Cox Town - coordinates_unverified
+- Richmond Town - coordinates_unverified
+- Cooke Town - coordinates_unverified
+- Benson Town - coordinates_unverified
+- Shivajinagar - coordinates_unverified
+- Vasanth Nagar - coordinates_unverified
+- Sadashivanagar - coordinates_unverified
+- Seshadripuram - coordinates_unverified
+- Majestic - coordinates_unverified
+- Gandhinagar - coordinates_unverified
+- Chamrajpet - coordinates_unverified
+- Vijayanagar - coordinates_unverified
+- Nagarbhavi - coordinates_unverified
+- Kengeri - coordinates_unverified
+- Kumaraswamy Layout - coordinates_unverified
+- Padmanabhanagar - coordinates_unverified
+- Uttarahalli - coordinates_unverified
+- Girinagar - coordinates_unverified
+- Hanumanth Nagar - coordinates_unverified
+- Vidyaranyapura - coordinates_unverified
+- Sahakar Nagar - coordinates_unverified
+- Sanjay Nagar - coordinates_unverified
+- RT Nagar - coordinates_unverified
+- Ganganagar - coordinates_unverified
+- Mathikere - coordinates_unverified
+- Yeshwanthpur - coordinates_unverified
+- Jalahalli - coordinates_unverified
+- Peenya - coordinates_unverified
+- Dasarahalli - coordinates_unverified
+- Nagasandra - coordinates_unverified
+- Hesaraghatta - coordinates_unverified
+- Doddaballapur - coordinates_unverified
+- Bagalur - coordinates_unverified
+- Thanisandra - coordinates_unverified
+- Hennur - coordinates_unverified
+- Horamavu - coordinates_unverified
+- Banaswadi - coordinates_unverified
+- Kammanahalli - coordinates_unverified
+- Kalyan Nagar - coordinates_unverified
+- Ramamurthy Nagar - coordinates_unverified
+- KR Puram - coordinates_unverified
+- Kasturi Nagar - coordinates_unverified
+- CV Raman Nagar - coordinates_unverified
+- Baiyappanahalli - coordinates_unverified
+- Benniganahalli - coordinates_unverified
+- Mahadevapura - coordinates_unverified
+- Doddanekundi - coordinates_unverified
+- Brookefield - coordinates_unverified
+- Kundalahalli - coordinates_unverified
+- AECS Layout - coordinates_unverified
+- Varthur - coordinates_unverified
+- Gunjur - coordinates_unverified
+- Kadugodi - coordinates_unverified
+- Belathur - coordinates_unverified
+- Channasandra - coordinates_unverified
+- Hoodi - coordinates_unverified
+- ITPL - coordinates_unverified
+- Panathur - coordinates_unverified
+- Balagere - coordinates_unverified
+- Kadubeesanahalli - coordinates_unverified
+- Devarabisanahalli - coordinates_unverified
+- Kaikondrahalli - coordinates_unverified
+- Kasavanahalli - coordinates_unverified
+- Harlur - coordinates_unverified
+- Kudlu - coordinates_unverified
+- Singasandra - coordinates_unverified
+- Begur - coordinates_unverified
+- Bommanahalli - coordinates_unverified
+- Hongasandra - coordinates_unverified
+- Garvebhavi Palya - coordinates_unverified
+- Hosur Road - coordinates_unverified
+- Chandapura - coordinates_unverified
+- Anekal - coordinates_unverified
+- Attibele - coordinates_unverified
+- Jigani - coordinates_unverified
+- Bommasandra - coordinates_unverified
+- Bannerghatta - coordinates_unverified
+- Gottigere - coordinates_unverified
+- Hulimavu - coordinates_unverified
+- Arekere - coordinates_unverified
+- Bilekahalli - coordinates_unverified
+- Dollars Colony - coordinates_unverified
+- Wilson Garden - coordinates_unverified
+- Shanti Nagar - coordinates_unverified
+- Langford Town - coordinates_unverified
+- Austin Town - coordinates_unverified
+- Neelasandra - coordinates_unverified
+- Adugodi - coordinates_unverified
+- Ejipura - coordinates_unverified
+- Vivek Nagar - coordinates_unverified
+- Victoria Layout - coordinates_unverified
+- Ashok Nagar - coordinates_unverified
+- Cubbon Park - coordinates_unverified
+- Church Street - coordinates_unverified
+- Residency Road - coordinates_unverified
+- Cunningham Road - coordinates_unverified
+- Infantry Road - coordinates_unverified
+- Kasturba Road - coordinates_unverified
+- Richmond Road - coordinates_unverified
+- Race Course Road - coordinates_unverified
+- Lavelle Road - coordinates_unverified
+- New BEL Road - coordinates_unverified
+- Devanahalli - coordinates_unverified
+- Jakkur - coordinates_unverified
+- Amruthahalli - coordinates_unverified
+- Kodigehalli - coordinates_unverified
+- Byatarayanapura - coordinates_unverified
+- Sampigehalli - coordinates_unverified
+- Nagavara - coordinates_unverified
+- Manyata Tech Park - coordinates_unverified
+- Chikkabanavara - coordinates_unverified
+- Soladevanahalli - coordinates_unverified
+- Rajanukunte - coordinates_unverified
+- Yelahanka New Town - coordinates_unverified
+- Kamakshipalya - coordinates_unverified
+- Basaveshwaranagar - coordinates_unverified
+- Laggere - coordinates_unverified
+- Nandini Layout - coordinates_unverified
+
+Gazetteer data/OSM centers: (c) OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). Names and aliases remain fallible and need local review.

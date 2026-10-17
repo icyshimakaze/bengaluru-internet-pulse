@@ -17,7 +17,7 @@ function adapters(count = 2): Record<Source, SourceAdapter> {
       return { ...observation(`${source}-${n}`, 1, source), title: text, text: excerpt, excerpt };
     }), health: { source, status: "ok", fetched: count, accepted: count, rejected: 0, durationMs: 0, checkedAt: now.toISOString() },
   });
-  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews"), currents: adapter("currents") };
+  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews"), currents: adapter("currents"), rss: adapter("rss") };
 }
 const mock: typeof classifyAI = (signals, topics) => classifyAI(signals, topics, { provider: "heuristic" });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
@@ -142,7 +142,7 @@ describe("durable semantic enrichment queue", () => {
     const signal = observation("existing", 1), item = fromSignal(signal);
     await repo.insertItem(item);
     const checksums = (await repo.client.execute("SELECT checksum FROM schema_migrations ORDER BY version")).rows;
-    expect(await repo.initialize()).toEqual({ applied: [4, 5, 6, 7, 8, 9], version: 9 });
+    expect(await repo.initialize()).toEqual({ applied: [4, 5, 6, 7, 8, 9, 10], version: 10 });
     expect((await repo.load(now)).items).toEqual([item]);
     expect((await repo.client.execute("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")).rows).toEqual(checksums);
     expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows[0]?.enrichment_attempts).toBe(0);

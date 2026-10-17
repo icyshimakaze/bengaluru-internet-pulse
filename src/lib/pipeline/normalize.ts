@@ -1,6 +1,7 @@
+import { mentionedNeighborhoods } from "./location";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { httpUrlSchema, signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood, neighborhoods } from "@/lib/domain/schema";
+import { httpUrlSchema, signalSchema, sourceTypeFor, type Signal, type Source, type Neighborhood } from "@/lib/domain/schema";
 import { sameSyndicatedContent, syndicationSignature, SyndicationIndex } from "./syndication";
 
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -38,7 +39,7 @@ export function contentFingerprint(input: { title: string; excerpt: string; doma
   // so the same syndicated headline/content on different domains can match.
   return hash(JSON.stringify({ version: 2, title, content: content === title ? "" : content }));
 }
-export function normalize(input: { source: Source; sourceId: string; url: string; contentUrl?: string; title: string; text?: string; publishedAt: string; timeKind?: "published" | "discovered" }, now: Date): Signal | null {
+export function normalize(input: { source: Source; sourceId: string; url: string; contentUrl?: string; title: string; text?: string; publishedAt: string; timeKind?: "published" | "discovered"; publisherName?: string }, now: Date): Signal | null {
   try {
     const date = new Date(z.iso.datetime({ offset: true }).parse(input.publishedAt));
     if (!Number.isFinite(date.getTime()) || date.getTime() > now.getTime() || date.getTime() < now.getTime() - 14 * 86400000) return null;
@@ -72,6 +73,6 @@ export function deduplicate<T extends Signal>(signals: readonly T[], existing: r
 }
 export function isBengaluruRelevant(text: string): boolean { return /\b(bengaluru|bangalore|bengalooru|namma\s+metro|bmrcl|bbmp)\b|ಬೆಂಗಳೂರು/i.test(text); }
 export function locate(text: string): Neighborhood | null {
-  const areas = neighborhoods.filter((n) => new RegExp(`\\b${n.replace(/ /g, "\\s+")}\\b`, "i").test(text.replace(/https?:\/\/\S+/gu, " ")));
+  const areas = mentionedNeighborhoods(text);
   return areas.length === 1 ? areas[0]! : null;
 }

@@ -12,6 +12,7 @@ import { log } from "@/lib/server/logger";
 import { deduplicate } from "./normalize";
 import { classifyAI, type Classification } from "./ai";
 import { checkpointCollection } from "@/lib/db/collection-repository";
+import { filterSignal } from "@/lib/ingestion/filters.config";
 
 type Options = {
   repository?: Repository; now?: Date; timeoutMs?: number;
@@ -27,7 +28,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
   const env = getIngestionEnv();
   const now = options.now ?? new Date();
   const isFixture = options.mode === "demo";
-  const configuredSources = sources.filter((source) => source !== "currents" || !isFixture && currentsEnabled(env));
+  const configuredSources = sources.filter((source) => source === "currents" ? !isFixture && currentsEnabled(env) : source === "rss" ? !isFixture && env.RSS_ENABLED : true);
   const repository = options.repository ?? new Repository(getDatabase());
   log("info", "ingest.started", { mode: isFixture ? "demo" : "live" });
   const migrations = await repository.initialize();
@@ -40,6 +41,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     await repository.recoverInterruptedRuns(now);
     for (const source of configuredSources) runs.push(await repository.startIngestionRun(source, now, isFixture));
     const existing = await repository.load(now, isFixture);
+    await repository.enrichment.recordFilters(existing.items.slice(0, 10000), lease, options.now ?? new Date());
     const adapters = options.adapters ?? createAdapters(undefined, { currentsKey: env.CURRENTS_API_KEY });
     const timeout = options.timeoutMs ?? env.SOURCE_TIMEOUT_MS;
     const results = await Promise.allSettled(configuredSources.map((source) => adapters[source](now, timeout)));
@@ -52,6 +54,12 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
       await checkpointCollection(repository.client, status, result.status === "fulfilled" ? result.value.signals : [], isFixture, now);
     }
     const collected = results.flatMap((r) => r.status === "fulfilled" ? r.value.signals : []);
+    for (const source of configuredSources) {
+      const filtered = collected.filter((s) => s.source === source).map((s) => filterSignal(s)).filter((reason) => reason !== null);
+      log("info", "ingest.filtered", { source, total: filtered.length,
+        jobs: filtered.filter((r) => r === "job_posting").length, weatherBot: filtered.filter((r) => r === "weather_bot").length,
+        hashtagSpam: filtered.filter((r) => r === "hashtag_spam").length, nearEmpty: filtered.filter((r) => r === "near_empty").length });
+    }
     const unique = deduplicate(isFixture ? collected.map((s) => ({ ...s, id: "fixture-" + s.id })) : collected, existing.items.map(toSignal));
     const topics = new Map(existing.topics.map((t) => [t.slug, t]));
     const records = new Map(existing.topicRecords.map((t) => [t.slug, t]));

@@ -16,4 +16,12 @@ Language badges use local Unicode script counts (English/Latin, Kannada, Tamil, 
 
 Privacy/Terms describe repository behavior and carry draft source comments. `CONTACT_EMAIL` is optional, server-validated and intentionally public only as the contact link.
 
-Phase 1 final checks: lint, typecheck, 461 unit tests, production build and all 36 Playwright tests passed. Browser checks include Status/Privacy/Terms WCAG A/AA scans, zero-score lead exclusion, footer navigation, and 320?1920px layouts. Full logs are retained locally under `.cache/portfolio/phase1-*.log`.
+Phase 1 final checks: lint, typecheck, 461 unit tests, production build and all 36 Playwright tests passed. Browser checks include Status/Privacy/Terms WCAG A/AA scans, zero-score lead exclusion, footer navigation, and 320–1920px layouts. Full logs are retained locally under `.cache/portfolio/phase1-*.log`.
+
+## Phase 2 verification
+
+Final standard `npm test`: 488 tests passed in 34 files. Lint, typecheck, production build and all 37 Playwright tests passed, including RSS/Jobs/language accessibility, map keyboard controls, provenance, migration rollback and existing provider behavior. One earlier serial fork run printed a native Windows shutdown warning after all assertions passed; an attempted thread pool crashed in the native runtime. The final standard pool passed cleanly. No tests were skipped, weakened or removed. Existing coordinate expectations now use verified OSM values, with new assertions excluding unverified centers.
+
+The deterministic score equation, weights, confidence, caps and lifecycle are unchanged. The only engine-file change is the map guard for unverified centers. The repository already used v3 before this work (Currents shares the v2 news channel); the request's v2 reference was not used to downgrade it. Migrations 0001–0009 retain their prior content/checksums. New migration 0010 adds RSS/filter/publisher contracts and preserves historical rows/provenance.
+
+Real cached feed XML passed the parser: The Hindu yielded 50 considered valid metadata entries; Citizen Matters yielded three locally relevant entries out of ten. These are parser checks, not ingestion counts or accuracy results. Publisher terms remain unchecked; RSS is implemented but disabled by default. GDELT remains an honestly reported upstream timeout/network limitation, with no unverified root-cause or repair claim.

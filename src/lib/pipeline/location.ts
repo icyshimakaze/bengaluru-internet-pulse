@@ -1,9 +1,16 @@
-import { neighborhoods } from "@/lib/domain/schema";
+import { neighborhoods, gazetteer } from "@/lib/domain/places";
 import { normalizeText } from "./matching";
+
+const matchers = neighborhoods.map((area) => ({ area, requiresCityContext: gazetteer[area].requiresCityContext,
+  patterns: gazetteer[area].aliases.map((alias) => {
+    const escaped = alias.toLowerCase().replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replaceAll(" ", "\\s+");
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "u");
+  }) }));
 
 export function mentionedNeighborhoods(text: string) {
   const value = normalizeText(text);
-  return neighborhoods.filter((area) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${area.toLowerCase().replaceAll(" ", "\\s+")}(?:$|[^\\p{L}\\p{N}])`, "u").test(value));
+  const city = /\b(bengaluru|bangalore|bengalooru|bmrcl|bbmp|bwssb|bescom|namma\s+metro)\b|ಬೆಂಗಳೂರು/iu.test(value);
+  return matchers.filter((entry) => (!entry.requiresCityContext || city) && entry.patterns.some((pattern) => pattern.test(value))).map((entry) => entry.area);
 }
 export function detectBengaluru(text: string): boolean {
   const value = normalizeText(text);
