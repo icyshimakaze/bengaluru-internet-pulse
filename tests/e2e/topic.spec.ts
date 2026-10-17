@@ -45,11 +45,8 @@ test("provider filters, evidence expansion, original links, methodology and rela
   await filters.getByRole("button", { name: /^All sources/ }).click();
   await evidence.getByRole("button", { name: "Show 24 more items" }).click();
   await expect(evidence.locator(".topic-evidence-card")).toHaveCount(30);
-  for (const link of await evidence.locator(".evidence-card-bottom a").all()) {
-    await expect(link).toHaveAttribute("href", /^https:\/\//);
-    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    await expect(link).toContainText("Open Example");
-  }
+  await expect(evidence.locator(".evidence-card-bottom a")).toHaveCount(0);
+  await expect(evidence.locator(".demo-evidence-note")).toHaveCount(30);
   await evidence.getByRole("button", { name: "Show fewer items" }).click();
   await expect(evidence.locator(".topic-evidence-card")).toHaveCount(6);
   const disclosure = page.locator(".topic-methodology summary");
@@ -64,7 +61,8 @@ test("provider filters, evidence expansion, original links, methodology and rela
   await expect(page.locator(".related-signal-list li")).toHaveCount(4);
   await page.getByRole("button", { name: "Show 8 more related signals" }).click();
   await expect(page.locator(".related-signal-list li")).toHaveCount(12);
-  for (const link of await page.locator(".related-signal-list a").all()) await expect(link).toHaveAttribute("href", /^https:\/\//);
+  await expect(page.locator(".related-signal-list a")).toHaveCount(0);
+  await expect(page.locator(".related-signal-list .demo-evidence-title")).toHaveCount(12);
 });
 
 test("cooling topics are explained honestly rather than presented as rising", async ({ page }) => {

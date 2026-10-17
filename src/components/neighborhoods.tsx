@@ -15,7 +15,7 @@ export const Neighborhoods = memo(function Neighborhoods({ hotspots, window, mod
   const activeHotspotsList = activeHotspots(hotspots);
   const selected = activeHotspotsList.find((h) => h.neighborhood === selection) ?? activeHotspotsList[0];
   const total = activeHotspotsList.reduce((sum, h) => sum + h.activity, 0);
-  return <section className="neighborhood-panel" aria-labelledby="neighborhood-heading"><div className="editorial-section-heading"><div><h2 id="neighborhood-heading">Across the city</h2><p>Neighborhoods in the conversation.</p></div><span className="panel-overline mono">{window.toUpperCase()} MENTIONS</span></div>
+  return <section id="city" className="neighborhood-panel" aria-labelledby="neighborhood-heading"><div className="editorial-section-heading"><div><div className="section-index mono">THE CITY / MENTION MAP</div><h2 id="neighborhood-heading">Across the city</h2><p>Neighborhoods in the conversation.</p></div><span className="panel-overline mono">{window.toUpperCase()} MENTIONS</span></div>
     {activeHotspotsList.length > 0 && <div className="neighborhood-plot"><svg viewBox="0 0 440 280" role="group" aria-label="Bengaluru neighborhood centers. Select a neighborhood to inspect its activity.">
       <g aria-hidden="true" className="geo-grid">{[80, 160, 240, 320, 400].map((x) => <path key={x} d={"M" + x + " 25V250"} />)}{[55, 115, 175, 235].map((y) => <path key={y} d={"M25 " + y + "H415"} />)}<text x="28" y="20">13.11° N</text><text x="28" y="267">12.84° N</text><text x="348" y="267">77.77° E</text><path d="M412 48V26m-4 5 4-5 4 5" className="north-arrow" /><text x="408" y="18">N</text></g>
       {activeHotspotsList.map((hotspot) => {

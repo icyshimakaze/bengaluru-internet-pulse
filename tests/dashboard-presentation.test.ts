@@ -1,12 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { demoReadState, projectDashboard } from "@/lib/server/projections";
-import { elapsedLabel, isLive, LIVE_FRESHNESS_MS } from "@/lib/trends/dashboard-presentation";
+import { elapsedLabel, emptyDashboardState, isLive, LIVE_FRESHNESS_MS } from "@/lib/trends/dashboard-presentation";
 import { readQuerySchema } from "@/lib/domain/read-models";
 import { FIXTURE_NOW } from "@/fixtures/demo";
 const now = FIXTURE_NOW.getTime();
 const demo = projectDashboard(demoReadState(FIXTURE_NOW), { window: "2h" }, FIXTURE_NOW);
 const live = { ...demo, mode: "live" as const, status: "healthy" as const, lastSuccessfulIngestion: FIXTURE_NOW.toISOString() };
 describe("truthful dashboard status", () => {
+  it("never describes missing or stale collection as a quiet city, even with filters", () => {
+    for (const pulse of [
+      { ...live, generatedAt: null }, { ...live, stale: true },
+      { ...live, status: "unavailable" as const }, { ...live, availableSources: [] },
+      { ...live, snapshot: { ...live.snapshot, refreshDelayed: true } },
+    ]) {
+      for (const filtered of [false, true]) expect(emptyDashboardState(pulse, filtered).eyebrow).toBe("COLLECTION DELAYED");
+    }
+  });
+  it("distinguishes limited coverage, healthy low activity and an empty selection", () => {
+    expect(emptyDashboardState({ ...live, status: "degraded" }, false).eyebrow).toBe("LIMITED COVERAGE");
+    expect(emptyDashboardState(live, false).eyebrow).toBe("A QUIET WINDOW");
+    expect(emptyDashboardState(demo, true).title).toBe("No matching conversations");
+  });
   it("never labels demo fixtures LIVE", () => expect(isLive({ ...demo, lastSuccessfulIngestion: FIXTURE_NOW.toISOString() }, now)).toBe(false));
   it("requires a successful, fresh, non-future ingestion and a readable snapshot", () => {
     expect(isLive(live, now)).toBe(true);

@@ -7,7 +7,7 @@ const MetadataContext = createContext<PulseMetadata | null>(null);
 const ClockContext = createContext<number | null>(null);
 const PublishContext = createContext<((pulse: DashboardData) => void) | null>(null);
 
-export function PulseProvider({ initialPulse, children }: { initialPulse: PulseMetadata; children: React.ReactNode }) {
+export function PulseProvider({ initialPulse, children }: { initialPulse: PulseMetadata; children?: React.ReactNode }) {
   const [pulse, setPulse] = useState(initialPulse);
   const [now, setNow] = useState(Date.parse(initialPulse.evaluatedAt));
   const publish = useCallback((next: DashboardData) => { setPulse(pulseMetadata(next)); setNow(Date.now()); }, []);

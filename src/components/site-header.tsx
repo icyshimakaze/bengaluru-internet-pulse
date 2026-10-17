@@ -1,17 +1,15 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { usePulseStatus } from "./pulse-context";
-import { isLive } from "@/lib/trends/dashboard-presentation";
+import { SystemStatus } from "./system-status";
+import { ArrowUpRight } from "lucide-react";
 export function SiteHeader() {
-  const { pulse, now } = usePulseStatus(), live = isLive(pulse, now), path = usePathname();
-  return <header className="site-header shell editorial-header">
+  const path = usePathname();
+  return <div className="masthead"><header className="site-header shell editorial-header">
     <Link href="/" className="wordmark" aria-label="Bengaluru Pulse home">
-      <span className="wordmark-title">Bengaluru Pulse<span className="wordmark-dot">.</span></span>
+      <svg className="brand-symbol" viewBox="0 0 30 30" aria-hidden="true"><path d="M2 16h7l4-10 5 20 4-10h6" fill="none" stroke="currentColor" strokeWidth="2" /></svg><span className="wordmark-title">Bengaluru<span>Pulse<span className="wordmark-dot">.</span></span></span>
     </Link>
-    <nav aria-label="Main navigation"><Link href="/" aria-current={path === "/" ? "page" : undefined}>The pulse</Link><Link href="/about" aria-current={path === "/about" ? "page" : undefined}>Methodology</Link></nav>
-    <div className={`live-indicator ${live ? "is-live" : "is-delayed"}`} title={pulse.mode === "demo" ? "Demo fixtures. No live ingestion has taken place." : "LIVE requires a successful ingestion within 45 minutes and a fresh readable snapshot."}>
-      <span aria-hidden="true" className="signal-dot" /><span>{pulse.mode === "demo" ? "DEMO" : live ? "LIVE" : "DELAYED"}</span><span className="status-mode">{pulse.mode === "demo" ? "FICTIONAL DATA" : "PUBLIC SIGNALS"}</span>
-    </div>
-  </header>;
+    <nav aria-label="Main navigation"><Link href="/" aria-current={path === "/" ? "page" : undefined}>Pulse</Link><Link href="/#explore">Explore</Link><Link href="/#city">Map</Link><Link href="/about" aria-current={path === "/about" ? "page" : undefined}>Methodology</Link></nav>
+    <SystemStatus /><a className="header-github" href="https://github.com/icyshimakaze/bengaluru-internet-pulse" target="_blank" rel="noopener noreferrer">GitHub <ArrowUpRight size={14} /><span className="sr-only"> (opens in a new tab)</span></a>
+  </header></div>;
 }

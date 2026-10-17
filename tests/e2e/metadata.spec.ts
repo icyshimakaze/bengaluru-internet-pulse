@@ -11,7 +11,8 @@ for (const path of ["/", "/about", "/topic/namma-metro"]) {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", canonicalPattern);
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", canonicalPattern);
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /Bengaluru Pulse/);
-    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", "https://bengaluru-internet-pulse.vercel.app/opengraph-image.png");
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", path.startsWith("/topic/")
+      ? "https://bengaluru-internet-pulse.vercel.app/api/og/namma-metro" : "https://bengaluru-internet-pulse.vercel.app/opengraph-image.png");
     await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
   });
 }

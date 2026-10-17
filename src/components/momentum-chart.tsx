@@ -32,7 +32,7 @@ export const MomentumChart = memo(function MomentumChart({ topics, initialDetail
       .map((h) => ({ at: h.capturedAt, value: h.pulseScore })) ?? [], [view, topic, validDetail]);
   const loading = view === "score" && !!topic && !validDetail && !error;
   return <section className="momentum-panel" aria-labelledby="momentum-heading">
-    <div className="editorial-section-heading"><div><h2 id="momentum-heading">Momentum over time</h2><p>{mode === "demo" ? "Fictional evidence · recorded score history" : "Recorded score history"}</p></div><span className="panel-overline mono">LAST 24H</span></div>
+    <div className="editorial-section-heading"><div><div className="section-index mono">02 / MOMENTUM EXPLORER</div><h2 id="momentum-heading">Momentum over time</h2><p>{mode === "demo" ? "Fictional evidence · recorded score history" : "Recorded score history"}</p></div><span className="panel-overline mono">LAST 24H</span></div>
     {topic ? <>
       <div className="chart-toolbar"><label><span className="sr-only">Chart topic</span><select aria-label="Chart topic" value={topic.slug} onChange={(e) => { setSelection(e.target.value); setError(false); setRetry(0); }}>{topics.map((t) => <option key={t.slug} value={t.slug}>{t.title}</option>)}</select></label><div role="group" aria-label="Chart metric" className="chart-metrics"><button aria-pressed={view === "score"} onClick={() => setView("score")}>Pulse Score</button><button aria-pressed={view === "signals"} onClick={() => setView("signals")}>Signals</button></div></div>
       <p className="chart-context">{view === "score" ? "Pulse Score / 100 · successive 2h windows" : "Distinct signals per hour · all contributing sources"}</p>

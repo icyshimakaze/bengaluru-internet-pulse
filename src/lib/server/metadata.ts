@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { z } from "zod";
 import { siteSettings, indexingAllowed, publicSiteOriginSchema } from "./site-config";
 
-export const SITE_TITLE = "Bengaluru Pulse — The city's internet, compressed";
-export const SITE_DESCRIPTION = "Detect rising topics across Bengaluru's public internet. Transparent momentum scoring across GDELT, Bluesky and Hacker News.";
+export const SITE_TITLE = "Bengaluru Pulse — The city's public internet, measured in motion";
+export const SITE_DESCRIPTION = "What is Bengaluru talking about, and what is accelerating? Explore public signals with transparent momentum scores and original evidence.";
 const PRODUCTION_ORIGIN = "https://bengaluru-internet-pulse.vercel.app";
 const productionHostSchema = z.string().trim().min(1).refine((host) => {
   try {

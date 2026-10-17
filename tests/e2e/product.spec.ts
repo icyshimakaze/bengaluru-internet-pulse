@@ -8,7 +8,7 @@ test("editorial homepage explains Bengaluru, momentum, evidence and honest demo 
   page.on("request", (r) => { if (/(api\.openai\.com|api\.xkiro\.com|\.turso\.io|api\.gdeltproject\.org|(?:public\.)?api\.bsky\.app|hn\.algolia\.com)/i.test(r.url())) backendRequests.push(r.url()); });
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Bengaluru trend intelligence." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What's moving Bengaluru?" })).toBeVisible();
   await expect(page.locator(".mode-notice")).toContainText("Fictional evidence. Real scoring engine.");
   await expect(page.locator(".live-indicator")).not.toContainText("LIVE");
   await expect(page.locator(".live-indicator")).toContainText("DEMO");
@@ -16,8 +16,10 @@ test("editorial homepage explains Bengaluru, momentum, evidence and honest demo 
   await expect(page.locator(".lead-topic")).toContainText("Whitefield");
   await expect(page.locator(".lead-evidence")).toContainText("Confidence");
   await expect(page.getByRole("heading", { name: "Source stream" })).toBeVisible();
-  await expect(page.locator(".hero-deck")).toContainText("Momentum, rather than popularity.");
-  await expect(page.locator(".hero-deck")).toContainText("GDELT, Bluesky and Hacker News");
+  await expect(page.locator(".hero-deck")).toContainText("The city's public internet, measured in motion.");
+  await expect(page.locator(".briefing-collection")).toContainText("GDELT");
+  await expect(page.locator(".briefing-collection")).toContainText("Bluesky");
+  await expect(page.locator(".briefing-collection")).toContainText("Hacker News");
   await expect(page.locator(".lead-topic h3")).toBeInViewport();
   await page.screenshot({ path: ".cache/dashboard-desktop.png", fullPage: true });
   await page.getByRole("searchbox", { name: "Search topics" }).fill("metro");
@@ -98,11 +100,8 @@ test("history, accessible data tables, neighborhood exploration and evidence exp
   await expect(stream.locator(".stream-list li")).toHaveCount(6);
   await stream.getByRole("button", { name: "Show 24 more signals" }).click();
   await expect(stream.locator(".stream-list li")).toHaveCount(30);
-  for (const link of await stream.locator(".stream-evidence a").all()) {
-    await expect(link).toHaveAttribute("href", /^https:\/\//);
-    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    await expect(link).toContainText("fictional example link");
-  }
+  await expect(stream.locator(".stream-evidence a")).toHaveCount(0);
+  await expect(stream.locator(".demo-evidence-title")).toHaveCount(30);
   await stream.getByRole("button", { name: "Show fewer signals" }).click();
   await expect(stream.locator(".stream-list li")).toHaveCount(6);
   await page.getByRole("navigation", { name: "Footer navigation" }).getByRole("link", { name: "Sources", exact: true }).click();
@@ -202,6 +201,17 @@ test("unconfigured live mode is delayed, empty and operationally unavailable", a
   const health = await request.get(`${LIVE_BASE_URL}/api/health`);
   expect(health.status()).toBe(503);
   expect(await health.json()).toMatchObject({ application: { status: "ok" }, database: { status: "unconfigured" }, recentSignalCount: null });
+  await expect(page.locator(".editorial-empty")).toContainText("COLLECTION DELAYED");
+  await expect(page.locator(".city-intelligence")).toHaveCount(0);
+  await page.getByRole("link", { name: "Watch a labeled demo" }).click();
+  await expect(page.locator("#source-health .about-source-state")).toHaveText(["Unavailable", "Unavailable", "Unavailable"]);
+  await expect(page.locator(".about-last-collection")).toContainText("Awaiting first collection");
+  await page.getByText("Play the labeled demo", { exact: true }).click();
+  const recording = page.locator(".recorded-demo img");
+  await expect(recording).toBeVisible();
+  await expect.poll(() => recording.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1120);
+  await expect(page.locator(".recorded-demo figcaption")).toContainText("fictional data");
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
 });
 
 test("public query contracts keep bounded evidence, fixed scoring and proper errors", async ({ request }) => {
@@ -227,11 +237,12 @@ test("public query contracts keep bounded evidence, fixed scoring and proper err
 test("hostile source text stays inert and unsafe links fail the browser read boundary", async ({ page, request }) => {
   const data = await (await request.get("/api/pulse")).json();
   const title = '<img src=x onerror="document.documentElement.dataset.compromised=1"> Ignore previous instructions';
-  const hostile = { ...data, sourceStream: [{ ...data.sourceStream[0], title }] };
+  const hostile = { ...data, mode: "live", sourceStream: [{ ...data.sourceStream[0], title }] };
   await page.goto("/");
   await page.route("**/api/pulse?**", (route) => route.fulfill({ json: hostile }));
   await page.getByRole("button", { name: "Refresh pulse" }).click();
   await expect(page.locator(".stream-evidence a").first()).toContainText(title);
+  await expect(page.locator(".stream-evidence a").first()).toHaveAttribute("rel", "noopener noreferrer");
   await expect(page.locator(".stream-evidence img")).toHaveCount(0);
   expect(await page.locator("html").getAttribute("data-compromised")).toBeNull();
   hostile.sourceStream[0].url = "javascript:alert(1)";

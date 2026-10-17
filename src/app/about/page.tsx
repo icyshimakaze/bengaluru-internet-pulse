@@ -1,16 +1,52 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
+import { SourceHealth } from "@/components/source-health";
+import { readHealth } from "@/lib/server/queries";
 import { pageMetadata } from "@/lib/server/metadata";
 
 export const metadata: Metadata = { title: "Methodology & sources", ...pageMetadata("Methodology & sources | Bengaluru Pulse",
   "How Bengaluru Pulse samples public signals, measures momentum, preserves source evidence and explains uncertainty.", "/about") };
 
-export default function AboutPage() {
+const steps = [
+  { title: "Collect", description: "Public signals from news, social conversation and tech discussions." },
+  { title: "Normalize", description: "Validate timestamps, preserve provenance and remove repeated evidence." },
+  { title: "Group", description: "Match equivalent conversations with AI or a local heuristic." },
+  { title: "Score", description: "Measure velocity, volume, diversity and recency with a deterministic engine." },
+  { title: "Verify", description: "Every trend links back to its underlying evidence." },
+];
+
+export default async function AboutPage() {
+  const health = await readHealth();
   return <article className="about-page">
     <Link href="/" className="back-link">← Back to the pulse</Link>
     <div className="eyebrow">Methodology / v2</div>
-    <h1>Momentum, with evidence.</h1>
+    <h1>How Bengaluru Pulse works.</h1>
     <p className="about-lead">What is gaining attention across Bengaluru? We measure changes in public conversation and keep the evidence visible.</p>
+
+    <ol className="method-steps" role="list" aria-label="How Bengaluru Pulse works">{steps.map((step, index) => <li key={step.title}>
+      <span className="method-step-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+      <div><h2>{step.title}</h2><p>{step.description}</p></div>
+    </li>)}</ol>
+
+    <section id="limitations" className="about-limitations" aria-labelledby="limitations-heading">
+      <h2 id="limitations-heading">Limits of the picture</h2>
+      <p><strong>Bengaluru Pulse is an experimental signal detector.</strong></p>
+      <p>It does not measure the opinions of all Bengaluru residents.</p>
+      <p>Data availability varies by platform.</p>
+      <p>Trend scores measure activity in observed public sources, not objective importance or truth.</p>
+    </section>
+
+    <SourceHealth health={health} />
+
+    <section id="demo" aria-labelledby="demo-heading"><h2 id="demo-heading">See it in action</h2>
+      <p>A recorded walkthrough of filtering a topic, opening its brief and inspecting the evidence. All data in this recording is fictional; the scoring engine and interface are real.</p>
+      <details className="method-detail recorded-demo"><summary>Play the labeled demo</summary>
+        <figure><Image src="/demo.gif" alt="Recorded demo showing topic filtering, a topic brief and evidence inspection with fictional data" width={1120} height={760} unoptimized />
+          <figcaption>Demo recording · fictional data · close this disclosure to hide the animation.</figcaption>
+        </figure>
+      </details>
+    </section>
 
     <section><h2>Momentum comes first</h2>
       <p>A topic with eight recent signals after one baseline signal, corroborated across sources, can outrank a familiar topic with 100 signals in each period. Pulse Score measures observed momentum, rather than audience size, importance or factual truth.</p>
@@ -22,6 +58,7 @@ export default function AboutPage() {
       <div className="about-source"><h3>Bluesky</h3><p>Public posts from AppView search. Results are sampled and can be incomplete or unavailable. Mentioning a place does not locate the author.</p><a href="https://docs.bsky.app/docs/advanced-guides/api-directory" target="_blank" rel="noopener noreferrer">Public API directory ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
       <div className="about-source"><h3>Hacker News</h3><p>Bengaluru-related stories via Algolia. A technical community&apos;s perspective, with a small and selective audience.</p><a href="https://hn.algolia.com/api" target="_blank" rel="noopener noreferrer">Algolia search API ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
       <p>Public search is a sample, not a census. Private groups and unsampled conversations are outside this view.</p>
+      <p>Search caps, indexing delays, language bias, coordinated posts and sparse local evidence affect coverage. Deduplication catches repeated links and matching text, but not every paraphrase. A burst can reflect confusion or disagreement. Follow the original evidence before drawing conclusions.</p>
     </section>
 
     <section id="scoring"><h2>A score you can inspect</h2>
@@ -42,7 +79,7 @@ export default function AboutPage() {
     </section>
 
     <section><h2>AI groups. The engine scores.</h2>
-      <p>AI may match equivalent topics, classify a category, extract explicit place mentions and describe the evidence. It never assigns scores, confidence, lifecycle or rank. Topic matching supports OpenAI, xKiro and a local heuristic. API failures fall back only to the heuristic, and actual processing provenance is recorded. Invalid results remain pending and outside scores.</p>
+      <p>AI may match equivalent topics, classify a category, extract explicit place mentions and describe the evidence. It never assigns scores, trend confidence, lifecycle or rank. Topic matching supports OpenAI, xKiro and a local heuristic. API failures fall back only to the heuristic, and actual processing provenance is recorded. Invalid results remain pending and outside scores.</p>
     </section>
 
     <section id="locations"><h2>Places mentioned, not people located</h2>
@@ -50,12 +87,10 @@ export default function AboutPage() {
     </section>
 
     <section id="live"><h2>Freshness stays visible</h2>
-      <p>LIVE requires an actual successful collection within 45 minutes and a fresh, readable snapshot. Collection is scheduled twice an hour; delays and source outages can reduce coverage. Snapshots older than 90 minutes are stale, and rankings age against the current time. Public page reads never trigger collection.</p>
+      <p>Collection is scheduled twice an hour. A source is Live for 45 minutes after a successful poll, Delayed up to 90 minutes and Stale after that. A recent failed or partial poll is Degraded while earlier successful coverage remains fresh; a failure without recent success is Error. A successful poll with zero matching results is still Live. These states are independent of the selected activity window and topic matching.</p>
+      <p>NOW shows the shortest window with a qualifying topic, or the shortest with collected evidence. Any expansion is labeled; an explicit 2H, 6H or 24H selection stays fixed. Scores always compare the latest two hours with the previous two. Snapshots older than 90 minutes are labeled stale, and scores age against the current time. Collection, enrichment and publication have separate status details. Public page reads never trigger collection.</p>
       <p>DEMO uses fictional, reproducible evidence with the real scoring engine. It is always labeled and never substitutes for missing live data. Original timestamps, source links, coverage gaps and failed reads remain visible.</p>
     </section>
 
-    <section><h2>Limits of the picture</h2>
-      <p>Search caps, indexing delays, language bias, coordinated posts and sparse local evidence affect coverage. Deduplication catches repeated links and matching text, but not every paraphrase. A burst can reflect confusion or disagreement. Follow the original evidence before drawing conclusions.</p>
-    </section>
   </article>;
 }

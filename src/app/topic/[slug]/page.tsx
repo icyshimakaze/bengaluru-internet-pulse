@@ -11,7 +11,8 @@ import { evidenceExplanation, evidenceLinks, observedMilestones } from "@/lib/tr
 import { SnapshotHistory } from "@/components/snapshot-history";
 import { TopicEvidence, RelatedSignals } from "@/components/topic-evidence";
 import { TopicRecovery } from "@/components/topic-recovery";
-import { pageMetadata } from "@/lib/server/metadata";
+import { pageMetadata, siteOrigin } from "@/lib/server/metadata";
+import { ShareTopic } from "@/components/share-topic";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
@@ -22,7 +23,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const detail = await readTopic(slug);
     if (!detail) return { title: "Topic unavailable", robots: { index: false } };
     const description = (detail.mode === "demo" ? "Fictional demo evidence. " : "") + detail.summary;
-    return { title: detail.topic.title, ...pageMetadata(detail.topic.title + " | Bengaluru Pulse", description, "/topic/" + slug) };
+    const metadata = pageMetadata(detail.topic.title + " | Bengaluru Pulse", description, "/topic/" + slug);
+    const image = new URL(`/api/og/${slug}`, siteOrigin());
+    return { ...metadata, title: detail.topic.title,
+      openGraph: { ...metadata.openGraph, images: [{ url: image, width: 1200, height: 630, alt: `${detail.topic.title} · observed momentum, with timestamp and evidence counts` }] },
+      twitter: { ...metadata.twitter, card: "summary_large_image", images: [image] } };
   }
   catch { return { title: "Topic unavailable", robots: { index: false } }; }
 }
@@ -45,8 +50,8 @@ export default async function TopicPage({ params }: Props) {
   ];
   const whyHeading = topic.lifecycle === "COOLING" ? "Why is this cooling?" : topic.lifecycle === "STABLE" ? "Why is this steady?" : topic.lifecycle === "NEW" ? "What is newly observed?" : "Why is this rising?";
   return <article className="topic-intelligence">
-    <div className="topic-topline"><Link href="/" className="editorial-link"><ArrowLeft size={13} aria-hidden="true" /> Back to the pulse</Link><span className="mono">BENGALURU / SIGNAL BRIEF</span></div>
-    {(detail.mode === "demo" || detail.stale || detail.status === "degraded" || detail.notice) && <div className="topic-data-notice" role="status"><span className="notice-label">{detail.mode === "demo" ? "DEMO EDITION" : detail.stale ? "STALE COLLECTION" : detail.status === "unavailable" ? "COLLECTION UNAVAILABLE" : "PARTIAL COVERAGE"}</span><p>{detail.mode === "demo" ? "Demo topic · fictional evidence, real deterministic scoring." : detail.notice ?? "Source coverage is degraded; displayed metrics reflect the retained evidence."}</p><Link href="/about#live">Data & limitations ↗</Link></div>}
+    <div className="topic-topline"><Link href="/" className="editorial-link"><ArrowLeft size={13} aria-hidden="true" /> Back to the pulse</Link><span className="mono">BENGALURU / SIGNAL BRIEF</span><ShareTopic title={topic.title} url={new URL(`/topic/${topic.slug}`, siteOrigin()).href} /></div>
+    {(detail.mode === "demo" || detail.stale || detail.status === "degraded" || detail.notice) && <div className="topic-data-notice"><span className="notice-label">{detail.mode === "demo" ? "DEMO EDITION" : detail.stale ? "STALE COLLECTION" : detail.status === "unavailable" ? "COLLECTION UNAVAILABLE" : "PARTIAL COVERAGE"}</span><p>{detail.mode === "demo" ? "Demo topic · fictional evidence, real deterministic scoring." : "Scores reflect retained evidence, aged to the current time."}</p>{detail.mode !== "demo" && <details className="notice-details"><summary>View details</summary><p>{detail.notice ?? "Source coverage is degraded."}</p></details>}<Link href="/about#live">Data & limitations ↗</Link></div>}
     <header className="topic-editorial-header"><div className="topic-title-block"><div className="topic-category-line"><span>{categoryLabels[topic.semanticCategory]}</span><span aria-hidden="true">·</span><span>{location.neighborhood ?? "Citywide / Unknown"}</span></div><h1>{topic.title}</h1><p className="topic-deck">{topic.description}</p></div><div className="topic-pulse-block"><span className="panel-overline">PULSE SCORE / 100</span><strong className="topic-pulse-value">{topic.score}</strong><div className="topic-score-context"><span className={topic.growthPercent > 0 ? "growth-positive" : "growth-other"} title="Smoothed change vs previous 2h, with a three-signal baseline floor and 300% upper bound">{formatChange(topic)}</span><span>vs previous 2h</span></div><span className={"lifecycle lifecycle-" + topic.lifecycle.toLowerCase()}>{topic.lifecycle}</span></div></header>
     <dl className="topic-vitals" aria-label="Topic metrics"><div><dt>Signals · latest 2H</dt><dd>{topic.current2h}<small> / {topic.previous2h} previous</small></dd></div><div><dt>Source providers · 2H</dt><dd>{topic.sourceCount}<small> / 3</small></dd></div><div><dt>Confidence</dt><dd>{Math.round(topic.confidence * 100)}<small>% · {topic.confidenceLabel}</small></dd></div><div className="vital-first-seen"><dt title="Preserved first-seen timestamp; this may originate from source publication or discovery.">First detected</dt><dd><Timestamp value={topic.firstSeenAt} /></dd></div></dl>
     <div className="topic-analysis-grid">

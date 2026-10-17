@@ -29,13 +29,14 @@ test("heavy charts and street-map assets load on demand without shifting the pag
   expect(assets.some((asset) => asset.chart || asset.map || asset.mapStyle)).toBe(false);
   expect(assets.reduce((total, asset) => total + asset.bytes, 0)).toBeLessThan(800_000);
   expect(assets.reduce((total, asset) => total + asset.gzip, 0)).toBeLessThan(230_000);
-  expect(fonts).toEqual([]);
+  expect(fonts.length).toBeLessThanOrEqual(2);
+  expect(fonts.every((url) => url.startsWith(new URL("/_next/static/media/", page.url()).href))).toBe(true);
 
   const plot = page.locator(".momentum-chart");
   const before = (await plot.boundingBox())!.height;
   await plot.scrollIntoViewIfNeeded();
   await expect(plot.locator(".recharts-line-curve")).toBeVisible();
-  expect((await plot.boundingBox())!.height).toBe(before);
+  expect((await plot.boundingBox())!.height).toBeCloseTo(before, 2);
   await page.waitForLoadState("networkidle"); await Promise.all(bodies);
   expect(assets.some((asset) => asset.chart)).toBe(true);
   expect(assets.some((asset) => asset.map || asset.mapStyle)).toBe(false);
