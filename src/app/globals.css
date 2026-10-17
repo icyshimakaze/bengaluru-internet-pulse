@@ -848,3 +848,4 @@ button,input,select { border-radius: 0; }
  .secondary-copy p { max-width: 23ch }
  .neighborhood-numbers>span { display: block; max-width: 100px; line-height: 1.8 }
 }
+.stream-evidence > .source-attribution, .related-signal-list .source-attribution { display: block; font-size: 12px; line-height: 1.5; font-weight: 400; }

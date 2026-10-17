@@ -17,11 +17,9 @@ export function testRepository(): Repository {
 afterEach(() => {
   for (const { client, directory } of databases.splice(0)) {
     client.close();
-    try { rmSync(directory, { recursive: true, force: true }); }
-    catch (error) {
-      // Native transaction handles are released by GC on Windows; locked files
-      // remain confined to ignored .cache rather than breaking test assertions.
-      if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM") throw error;
-    }
+    // The Windows SDK retains native transaction/file handles until GC. Deleting
+    // an active database can race finalizers, report EBUSY/EPERM or crash a worker.
+    // Leave only these isolated, ignored test directories for later cleanup.
+    if (process.platform !== "win32") rmSync(directory, { recursive: true, force: true });
   }
 });

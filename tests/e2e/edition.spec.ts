@@ -17,6 +17,7 @@ test("keyed Currents renders as a fourth news provider with attribution and acce
   await page.getByRole("group", { name: "Source stream type" }).getByRole("button", { name: "News", exact: true }).click();
   await expect(page.locator(".stream-list")).toContainText(signal.title);
   await expect(page.locator(".stream-list").getByRole("link", { name: "Powered by Currents News API", exact: false })).toHaveAttribute("href", "https://currentsapi.services/");
+  await expect(page.locator(".stream-list .source-attribution")).toHaveCSS("font-size", "12px");
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

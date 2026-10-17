@@ -5,6 +5,7 @@ import { createCurrentsAdapter, currentsPublishedAt, currentsQueries } from "@/l
 import { createAdapters } from "@/lib/sources/adapters";
 import { fetchJson, type Transport } from "@/lib/sources/http";
 import { currentsEnabled, parseIngestionEnv } from "@/lib/server/ingestion-env";
+import { ingestionReport, formatIngestionSummary } from "@/lib/server/ingestion-report";
 import { ingest } from "@/lib/pipeline/ingest";
 import { classifyAI } from "@/lib/pipeline/ai";
 import { deduplicate } from "@/lib/pipeline/normalize";
@@ -98,6 +99,9 @@ describe("optional private Currents ingestion", () => {
     const repo = testRepository(), adapters = createAdapters(async (url) => publicPayload(url), { currentsKey: key });
     const first = await ingest({ repository: repo, now, adapters, enrich: mockEnrich });
     expect(first.added).toBe(1); expect(first.runs).toHaveLength(4);
+    const report = ingestionReport(first, false, now);
+    expect(report.availableSources).toBe(4); expect(report.sources).toHaveLength(4);
+    expect(formatIngestionSummary(report)).toContain("| currents | completed | 1 | 1 | 0 | 0 |");
     expect(first.pulse?.sources.find((s) => s.source === "currents")).toMatchObject({ status: "ok", accepted: 1 });
     const second = await ingest({ repository: repo, now, adapters, enrich: mockEnrich });
     expect(second.added).toBe(0); expect(second.runs.find((r) => r.source === "currents")).toMatchObject({ inserted: 0, duplicates: 1 });
@@ -120,6 +124,7 @@ describe("optional private Currents ingestion", () => {
     }, { currentsKey: key });
     const result = await ingest({ repository: repo, now, adapters, enrich: mockEnrich });
     expect(result.pulse?.status).toBe("degraded"); expect(result.runs).toHaveLength(4);
+    expect(ingestionReport(result, false, now)).toMatchObject({ status: "degraded", availableSources: 3 });
     expect(result.runs.filter((r) => r.source !== "currents").every((r) => r.status === "completed")).toBe(true);
     expect(result.pulse?.sources.find((s) => s.source === "currents")).toMatchObject({ status: "error", error: code });
   });

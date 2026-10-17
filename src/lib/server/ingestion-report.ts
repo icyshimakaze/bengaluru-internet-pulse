@@ -1,7 +1,7 @@
 import "server-only";
 import { IngestionEnvironmentError, ingestionVariableNames } from "./ingestion-env";
 import { z } from "zod";
-import { sourceSchema, pulseSchema } from "@/lib/domain/schema";
+import { sourceSchema, pulseSchema, sources } from "@/lib/domain/schema";
 import type { IngestionResult } from "@/lib/pipeline/ingest";
 
 const count = z.number().int().nonnegative();
@@ -9,10 +9,10 @@ export const ingestionReportSchema = z.object({
   event: z.enum(["cli.ingest", "cli.ingest.failed"]), at: z.iso.datetime(),
   status: z.enum(["completed", "degraded", "skipped", "failed"]), mode: z.enum(["demo", "live"]),
   coverage: pulseSchema.shape.status.nullable(), capturedAt: z.iso.datetime().nullable(),
-  added: count.nullable(), rankedTopics: count.nullable(), availableSources: count.max(3).nullable(),
+  added: count.nullable(), rankedTopics: count.nullable(), availableSources: count.max(sources.length).nullable(),
   enrichment: pulseSchema.shape.enrichment.unwrap().nullable(),
   sources: z.array(z.object({ source: sourceSchema, status: z.enum(["completed", "partial", "failed", "abandoned"]),
-    discovered: count, inserted: count, duplicates: count, errors: count }).strict()).max(3),
+    discovered: count, inserted: count, duplicates: count, errors: count }).strict()).max(sources.length),
   pruned: z.object({ items: count, snapshots: count, pulseSnapshots: count, ingestionRuns: count, topics: count }).strict().nullable(),
   failureCode: z.enum(["INVALID_CLI_ARGUMENT", "REMOTE_DATABASE_REQUIRED", "INVALID_INGESTION_CONFIGURATION", "INGEST_FAILED"]).nullable(),
   invalidVariables: z.array(z.enum(ingestionVariableNames)).default([]),
