@@ -3,9 +3,11 @@ import { locationEvidenceSchema } from "@/lib/domain/read-models";
 
 /** A literal source headline with link/attribution noise removed, never a generated claim. */
 export function evidenceHeadline(value: string): string | null {
-  const cleaned = value.replace(/\b(?:https?:\/\/|www\.)\S+/giu, " ")
+  const text = value.replace(/\b(?:https?:\/\/|www\.)\S+/giu, " ")
     .split(/\b(?:original\s+post|source)\s*:/iu)[0]!
-    .replace(/#[\p{L}\p{N}_]+/gu, " ").replace(/\s+/gu, " ").trim();
+    .replace(/#([\p{L}\p{M}\p{N}_]+)/gu, "$1").replace(/\s+/gu, " ").trim();
+  // Prefer an actual opening sentence to a post's appended tag/footer list.
+  const cleaned = (text.match(/^(.{24,}?[.!?])(?:\s|$)/u)?.[1] ?? text).replace(/(?:\s*[|·])+\s*$/gu, "").trim();
   if ((cleaned.match(/\p{L}/gu) ?? []).length < 3) return null;
   if (cleaned.length <= 100) return cleaned;
   const prefix = cleaned.slice(0, 97), boundary = prefix.lastIndexOf(" ");

@@ -13,7 +13,10 @@ describe("evidence-grounded topic explanations", () => {
   it("preserves the source's readable wording while removing URL and attribution noise", () => {
     expect(evidenceHeadline("5th T20I: Play stopped as rain returns in Bengaluru. #INDvsWI https://example.org/story Source: @reporter Original Post: https://example.org/post"))
       .toBe("5th T20I: Play stopped as rain returns in Bengaluru.");
-    expect(evidenceHeadline("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ #Bengaluru")).toBe("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ");
+    expect(evidenceHeadline("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ #Bengaluru")).toBe("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ Bengaluru");
+    expect(evidenceHeadline("5வது டி20 போட்டி - இந்திய #அணி முதலில் பேட்டிங்..! #Bengaluru | #INDvsWI | #Polimernews"))
+      .toBe("5வது டி20 போட்டி - இந்திய அணி முதலில் பேட்டிங்..!");
+    expect(evidenceHeadline("A Bengaluru community announcement | | ")).toBe("A Bengaluru community announcement");
     expect(evidenceHeadline("https://example.org/#news")).toBeNull();
     const long = "A public source headline with Bengaluru context and enough complete words to require careful truncation while preserving its original facts";
     const displayed = evidenceHeadline(long)!;
