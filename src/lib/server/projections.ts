@@ -1,6 +1,6 @@
 import "server-only";
 import { dashboardSchema, publicTopicSchema, topicDetailSchema, publicSignalSchema, publicSourceSchema, publicRunSchema,
-  snapshotInfoSchema, publicHotspotSchema, historySnapshotSchema, healthSchema, topicListSchema, type ReadQuery, type PublicTopic, type TopicListQuery } from "@/lib/domain/read-models";
+  snapshotInfoSchema, publicHotspotSchema, historySnapshotSchema, healthSchema, topicListSchema, type ReadQuery, type PublicTopic, type TopicListQuery, type DashboardQuery } from "@/lib/domain/read-models";
 import { sources, coordinates, type SourceStatus, type Observation, type Source, type Pulse } from "@/lib/domain/schema";
 import { evaluateTopics, deduplicateEvidence, HOUR } from "@/lib/trends/engine";
 import { toObservations, toDomainTopic, fromSignal } from "@/lib/db/mapping";
@@ -10,11 +10,13 @@ import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { legacySemanticCategory, type EnrichmentResult } from "@/lib/domain/enrichment";
 import { supportedLocation } from "@/lib/trends/topic-presentation";
+import { collectionState, type CollectionRecord } from "@/lib/domain/source-health";
+import { activityWindows, meaningfulWindow } from "@/lib/trends/window-selection";
 
 export const STALE_MS = 90 * 60000;
 const order = (a: PublicTopic, b: PublicTopic) => b.score - a.score || b.velocity - a.velocity || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
 export function emptyReadState(now: Date): ReadState {
-  return { mode: "live", loadedAt: now.toISOString(), snapshot: null, topics: [], items: [], sourceRuns: [], semanticCategories: {},
+  return { mode: "live", loadedAt: now.toISOString(), snapshot: null, topics: [], items: [], sourceRuns: [], collections: [], semanticCategories: {},
     lastIngestion: null, lastSuccessfulIngestion: null, history: [], historyTruncated: false };
 }
 export function demoReadState(now: Date, slug?: string): ReadState {
@@ -37,22 +39,34 @@ export function demoReadState(now: Date, slug?: string): ReadState {
       data.observations.filter((o) => o.topicSlug === slug), new Date(now.getTime() - (48 - index) * HOUR / 2),
       undefined, undefined, toDomainTopic(descriptor))) : [] };
 }
-export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now: Date, mode: Pulse["mode"]) {
+export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now: Date, mode: Pulse["mode"], collections: CollectionRecord[] = []) {
   return sources.map((source) => {
-    const record = stored.find((s) => s.source === source), run = runs.find((r) => r.source === source);
-    let health: SourceStatus = record ?? { source, status: "unavailable", fetched: 0, accepted: 0, rejected: 0,
+    const storedSource = stored.find((s) => s.source === source), run = runs.find((r) => r.source === source);
+    let health: SourceStatus = storedSource ?? { source, status: "unavailable", fetched: 0, accepted: 0, rejected: 0,
       durationMs: 0, checkedAt: now.toISOString() };
-    if (mode === "live" && run?.finishedAt && (!record || run.finishedAt >= record.checkedAt)) health = {
+    if (mode === "live" && run?.finishedAt && (!storedSource || run.finishedAt >= storedSource.checkedAt)) health = {
       source, status: run.status === "completed" ? "ok" : run.status === "partial" ? "partial" : "error",
       fetched: run.discovered, accepted: run.inserted + run.duplicates, rejected: run.errors,
       durationMs: Date.parse(run.finishedAt) - Date.parse(run.startedAt), checkedAt: run.finishedAt,
     };
+    const checkpoint = collections.find((c) => c.health.source === source);
+    if (checkpoint) health = checkpoint.health;
     const { error: _error, ...safe } = health; void _error;
-    return publicSourceSchema.parse({ ...safe, stale: now.getTime() - Date.parse(health.checkedAt) > STALE_MS || Date.parse(health.checkedAt) > now.getTime(),
+    const record: CollectionRecord = checkpoint ?? { health,
+      lastAttemptAt: run?.startedAt ?? health.checkedAt,
+      lastSuccessAt: ["ok", "partial", "demo"].includes(health.status) ? health.checkedAt : null,
+      lastItemAt: null, lastErrorAt: ["error", "partial"].includes(health.status) ? health.checkedAt : null,
+      lastErrorType: health.status === "error" ? "SOURCE_UNAVAILABLE" : health.status === "partial" ? "PARTIAL_QUERY_FAILURE" : null,
+      itemsLastRun: health.accepted };
+    const healthState = collectionState(record, now.getTime());
+    return publicSourceSchema.parse({ ...safe, healthState,
+      stale: !record.lastSuccessAt || now.getTime() - Date.parse(record.lastSuccessAt) > STALE_MS || Date.parse(record.lastSuccessAt) > now.getTime(),
+      lastAttemptAt: record.lastAttemptAt, lastSuccessAt: record.lastSuccessAt, lastItemAt: record.lastItemAt,
+      lastErrorAt: record.lastErrorAt, lastErrorType: record.lastErrorType, itemsLastRun: record.itemsLastRun,
       ingestionStatus: mode === "demo" ? null : run?.status ?? null });
   });
 }
-const available = (rows: ReturnType<typeof publicSources>): Source[] => rows.filter((s) => !s.stale && ["ok", "partial", "demo"].includes(s.status)).map((s) => s.source);
+const available = (rows: ReturnType<typeof publicSources>): Source[] => rows.filter((s) => ["live", "delayed", "degraded", "demo"].includes(s.healthState)).map((s) => s.source);
 function info(state: ReadState, query: ReadQuery, now: Date) {
   const capturedAt = state.snapshot?.generatedAt ?? null;
   const ageSeconds = capturedAt ? Math.max(0, (now.getTime() - Date.parse(capturedAt)) / 1000) : null;
@@ -109,19 +123,42 @@ function topicCandidates(metrics: ReturnType<typeof metricTopics>, query: ReadQu
     && (!query.source || selected(t.evidence, query, now).length > 0)).sort((a, b) => order(a.public, b.public));
 }
 function projectionStatus(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
-  const snapshot = info(state, query, now), sourceStatuses = publicSources(state.snapshot?.sources ?? [], state.sourceRuns, now, state.mode);
+  const snapshot = info(state, query, now), sourceStatuses = publicSources(state.snapshot?.sources ?? [], state.sourceRuns, now, state.mode, state.collections);
   let status: Pulse["status"] = state.mode === "demo" ? "demo" : !state.snapshot ? "unavailable" : state.snapshot.status;
   if (status === "healthy" && (snapshot.stale || snapshot.refreshDelayed || sourceStatuses.some((s) => s.stale || s.status !== "ok"))) status = "degraded";
   const notices = [failureNotice, state.snapshot?.notice,
     snapshot.stale && state.snapshot ? "The collection is over 90 minutes old; displayed metrics have been aged using the current time." : null,
-    snapshot.refreshDelayed ? "Read-model refresh is delayed; showing the last validated cached data." : null,
+    snapshot.refreshDelayed ? "The latest data refresh is delayed; showing the last available snapshot." : null,
     state.snapshot?.version === "v1" ? "Scoring updated to v2 using retained evidence; the collection timestamp is unchanged." : null];
   return { snapshot, sourceStatuses, status,
     notice: notices.filter(Boolean).join(" ") || (status === "unavailable" ? "No live snapshot is available yet." : null) };
 }
-export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, failureNotice?: string) {
+export function projectDashboard(state: ReadState, requested: DashboardQuery, now: Date, failureNotice?: string) {
+  const baseQuery: ReadQuery = { ...requested, window: requested.window === "now" ? "24h" : requested.window };
+  const baseMetrics = metricTopics(state, baseQuery, now);
+  const records = new Map(state.topics.map((topic) => [topic.slug, topic]));
+  const windows = new Map<ReadQuery["window"], ReturnType<typeof metricTopics>>();
+  for (const window of requested.window === "now" ? activityWindows : [baseQuery.window]) {
+    windows.set(window, window === baseQuery.window ? baseMetrics : baseMetrics.map((topic) => {
+      const activity = selected(topic.evidence, { window }, now), mentions = new Map<string, number>();
+      for (const signal of activity) if (signal.neighborhood) mentions.set(signal.neighborhood, (mentions.get(signal.neighborhood) ?? 0) + 1);
+      const neighborhood = [...mentions].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? records.get(topic.public.slug)?.neighborhood ?? null;
+      return { ...topic, public: publicTopicSchema.parse({ ...topic.public, activityCount: activity.length, neighborhood }) };
+    }));
+  }
+  const effective = requested.window === "now" ? meaningfulWindow(activityWindows.map((window) => {
+    const query: ReadQuery = { ...requested, window };
+    const metrics = windows.get(window)!;
+    return { window, topics: state.snapshot ? topicCandidates(metrics, query, now).length : 0,
+      signals: state.items.filter((item) => Date.parse(item.publishedAt) <= now.getTime()
+        && Date.parse(item.publishedAt) > now.getTime() - Number.parseInt(window) * HOUR
+        && item.enrichmentStatus !== "irrelevant" && (!query.source || item.source === query.source)
+        && (!query.category || state.topics.some((topic) => topic.id === item.topicId
+          && (topic.category === query.category || state.semanticCategories[topic.id] === query.category)))).length };
+  })) : requested.window;
+  const query: ReadQuery = { ...requested, window: effective };
   const { snapshot, sourceStatuses, status, notice } = projectionStatus(state, query, now, failureNotice);
-  const metrics = metricTopics(state, query, now), candidates = topicCandidates(metrics, query, now);
+  const metrics = windows.get(query.window)!, candidates = topicCandidates(metrics, query, now);
   const byId = new Map(state.items.map((i) => [i.id, i]));
   const topicsById = new Map(state.topics.map((topic) => [topic.id, topic]));
   // The same connected-identity dedupe protects pending stream rows and ranked evidence.
@@ -138,9 +175,10 @@ export function projectDashboard(state: ReadState, query: ReadQuery, now: Date, 
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   const visible = state.snapshot ? candidates : [];
   return dashboardSchema.parse({ version: "v2", mode: state.mode, generatedAt: snapshot.capturedAt, evaluatedAt: snapshot.evaluatedAt,
-    stale: snapshot.stale, status, totalSignals: state.snapshot?.totalSignals ?? 0,
+    stale: snapshot.stale, status, totalSignals: state.snapshot ? deduplicateEvidence(toObservations(state.items, state.topics), now)
+      .filter((item) => Date.parse(item.publishedAt) >= now.getTime() - 24 * HOUR).length : 0,
     notice, enrichment: state.snapshot?.enrichment,
-    window: query.window, filters: { category: query.category ?? null, source: query.source ?? null }, snapshot,
+    window: query.window, requestedWindow: requested.window, filters: { category: query.category ?? null, source: query.source ?? null }, snapshot,
     topTopics: visible.slice(0, 50).map((t) => t.public), risingTopics: visible.filter((t) => ["HOT", "RISING", "EMERGING"].includes(t.public.lifecycle)).slice(0, 50).map((t) => t.public),
     topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, topicsById)),
     signalCount: stream.length, streamTruncated: stream.length > 30, sources: sourceStatuses, availableSources: available(sourceStatuses),
@@ -176,8 +214,8 @@ export function projectTopic(state: ReadState, slug: string, now: Date) {
     locationEvidence: supportedLocation(match.evidence),
     evidenceTruncated: match.evidence.length > 30, relatedSignals: related.map((o) => publicSignal(byId.get(o.id)!, topicsById)) });
 }
-export function projectHealth(data: Awaited<ReturnType<ReadRepository["health"]>>, now: Date, databaseStatus: "ok" | "unconfigured" | "unavailable" | "not_required" = "ok", mode: Pulse["mode"] = "live") {
-  const rows = publicSources(data.sources, data.sourceRuns, now, mode), generatedAt = data.generatedAt;
+export function projectHealth(data: Omit<Awaited<ReturnType<ReadRepository["health"]>>, "collections"> & { collections?: CollectionRecord[] }, now: Date, databaseStatus: "ok" | "unconfigured" | "unavailable" | "not_required" = "ok", mode: Pulse["mode"] = "live") {
+  const rows = publicSources(data.sources, data.sourceRuns, now, mode, data.collections), generatedAt = data.generatedAt;
   const stale = !generatedAt || now.getTime() - Date.parse(generatedAt) > STALE_MS;
   const status: Pulse["status"] = mode === "demo" ? "demo" : databaseStatus !== "ok" || !generatedAt || data.collectionStatus === "unavailable" ? "unavailable"
     : stale || data.collectionStatus === "degraded" || rows.some((s) => s.stale || s.status !== "ok") ? "degraded" : "healthy";

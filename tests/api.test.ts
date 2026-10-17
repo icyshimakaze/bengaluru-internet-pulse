@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { now } from "./helpers";
 import { lifecycles } from "@/lib/domain/schema";
-import { readQuerySchema, hotspotsResponseSchema, topicListQuerySchema } from "@/lib/domain/read-models";
+import { readQuerySchema, dashboardQuerySchema, hotspotsResponseSchema, topicListQuerySchema } from "@/lib/domain/read-models";
 import { demoReadState, emptyReadState, projectDashboard, projectHealth, projectTopic, projectTopicList } from "@/lib/server/projections";
 vi.mock("@/lib/server/queries", async (original) => ({ ...await original<typeof import("@/lib/server/queries")>(),
   readDashboard: vi.fn(), readTopics: vi.fn(), readTopic: vi.fn(), readHealth: vi.fn(), readHotspots: vi.fn() }));
@@ -15,7 +15,7 @@ const request = (path = "") => new Request("https://example.org/api/" + path);
 const topicRequest = (slug: string) => detail(request("topics/" + slug), { params: Promise.resolve({ slug }) });
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(readDashboard).mockImplementation(async (query = {}) => projectDashboard(demoReadState(now), readQuerySchema.parse(query), now));
+  vi.mocked(readDashboard).mockImplementation(async (query = {}) => projectDashboard(demoReadState(now), dashboardQuerySchema.parse(query), now));
   vi.mocked(readTopics).mockImplementation(async (query = {}) => projectTopicList(demoReadState(now), topicListQuerySchema.parse(query), now));
   vi.mocked(readTopic).mockImplementation(async (slug) => projectTopic(demoReadState(now, slug), slug, now));
   vi.mocked(readHealth).mockResolvedValue(projectHealth({ generatedAt: now.toISOString(), sources: demoReadState(now).snapshot!.sources,

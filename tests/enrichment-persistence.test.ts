@@ -41,42 +41,43 @@ describe("durable semantic enrichment queue", () => {
     expect((await repo.enrichment.recentRuns()).map((run) => run.report.attempted)).toEqual([0, 6]);
     expect(await repo.fetchHotspotActivity({ since: new Date(now.getTime() - DAY), until: now })).toEqual([]);
   });
-  it("retains unprocessed signals and recovers them after cooldown without duplicating collection", async () => {
+  it("immediately recovers missing provider results locally without duplicating collection", async () => {
     const repo = testRepository();
     const failed = await ingest({ repository: repo, now, adapters: adapters(), enrich: async () => new Map() });
-    expect(failed).toMatchObject({ added: 6, pulse: { status: "degraded", totalSignals: 0, trends: [] } });
-    expect((await repo.load(now)).items.every((i) => i.enrichmentStatus === "pending")).toBe(true);
+    expect(failed).toMatchObject({ added: 6, pulse: { totalSignals: 6, enrichment: { pending: 0, completed: 6 } } });
+    expect((await repo.load(now)).items.every((i) => i.enrichmentStatus === "completed" && i.enrichmentProvider === "heuristic")).toBe(true);
     const enrich = vi.fn(mock);
     await ingest({ repository: repo, now: new Date(now.getTime() + 5 * 60000), adapters: adapters(), enrich });
     expect(enrich).not.toHaveBeenCalled();
-    expect((await repo.latest())?.enrichment).toMatchObject({ provider: "none", pending: 6, completed: 0 });
-    expect((await repo.latest())?.status).toBe("degraded");
+    expect((await repo.latest())?.enrichment).toMatchObject({ pending: 0, completed: 6 });
     const recovered = await ingest({ repository: repo, now: new Date(now.getTime() + 15 * 60000), adapters: adapters(), enrich });
     expect(recovered.added).toBe(0); expect(recovered.pulse?.totalSignals).toBe(6);
-    expect(enrich).toHaveBeenCalledTimes(1);
+    expect(enrich).not.toHaveBeenCalled();
     const data = await repo.load(new Date(now.getTime() + 15 * 60000));
     expect(data.items).toHaveLength(6); expect(data.observations).toHaveLength(6);
     expect((await repo.ingestionStatus()).filter((r) => r.inserted === 2)).toHaveLength(3);
   });
-  it("limits each item's paid-capable enrichment to three runs and enforces retry cooldown", async () => {
+  it("does not keep retrying an API after successful local recovery", async () => {
     const repo = testRepository(), enrich = vi.fn(async () => new Map());
     for (const minutes of [0, 5, 15, 30, 45]) await ingest({ repository: repo, now: new Date(now.getTime() + minutes * 60000), adapters: adapters(), enrich });
-    expect(enrich).toHaveBeenCalledTimes(3);
+    expect(enrich).toHaveBeenCalledTimes(1);
     const attempts = (await repo.client.execute("SELECT enrichment_attempts FROM items")).rows;
-    expect(attempts.every((r) => r.enrichment_attempts === 3)).toBe(true);
-    expect((await repo.load(new Date(now.getTime() + 45 * 60000))).items.every((i) => i.enrichmentStatus === "pending")).toBe(true);
+    expect(attempts.every((r) => r.enrichment_attempts === 1)).toBe(true);
+    expect((await repo.load(new Date(now.getTime() + 45 * 60000))).items.every((i) => i.enrichmentStatus === "completed")).toBe(true);
   });
-  it("saves every new signal while bounding enrichment work and lets later polls drain the queue", async () => {
+  it("bounds the selected provider while draining the remainder with the real local heuristic", async () => {
     vi.stubEnv("MAX_AI_ITEMS_PER_RUN", "4"); vi.stubEnv("AI_BATCH_SIZE", "2");
     const repo = testRepository(), enrich = vi.fn(mock);
     const first = await ingest({ repository: repo, now, adapters: adapters(10), enrich });
     expect(first.added).toBe(30);
     const firstData = await repo.load(now);
-    expect(firstData.items.filter((i) => i.enrichmentStatus === "completed")).toHaveLength(4);
-    expect(firstData.items.filter((i) => i.enrichmentStatus === "pending")).toHaveLength(26);
+    expect(firstData.items.filter((i) => i.enrichmentStatus === "completed")).toHaveLength(30);
+    expect(firstData.items.filter((i) => i.enrichmentStatus === "pending")).toHaveLength(0);
+    expect(first.pulse?.enrichment?.run).toMatchObject({ attempted: 30, heuristicEnriched: 30, unprocessed: 0 });
     const second = await ingest({ repository: repo, now, adapters: adapters(10), enrich });
     expect(second.added).toBe(0);
-    expect((await repo.load(now)).items.filter((i) => i.enrichmentStatus === "completed")).toHaveLength(8);
+    expect((await repo.load(now)).items.filter((i) => i.enrichmentStatus === "completed")).toHaveLength(30);
+    expect(enrich).toHaveBeenCalledTimes(1);
     expect(enrich.mock.calls.every(([signals]) => signals.length === 4)).toBe(true);
   });
   it("fetches unranked active topic IDs from 24 hours and excludes older and other dataset topics", async () => {
@@ -141,7 +142,7 @@ describe("durable semantic enrichment queue", () => {
     const signal = observation("existing", 1), item = fromSignal(signal);
     await repo.insertItem(item);
     const checksums = (await repo.client.execute("SELECT checksum FROM schema_migrations ORDER BY version")).rows;
-    expect(await repo.initialize()).toEqual({ applied: [4, 5, 6], version: 6 });
+    expect(await repo.initialize()).toEqual({ applied: [4, 5, 6, 7], version: 7 });
     expect((await repo.load(now)).items).toEqual([item]);
     expect((await repo.client.execute("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")).rows).toEqual(checksums);
     expect((await repo.client.execute("SELECT enrichment_attempts FROM items")).rows[0]?.enrichment_attempts).toBe(0);

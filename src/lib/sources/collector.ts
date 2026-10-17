@@ -15,12 +15,14 @@ export function collectSource(definition: Definition, transport: Transport, opti
     const started = Date.now(), deadline = AbortSignal.timeout(budgetMs);
     const queries = definition.queries(now);
     let next = 0, succeeded = 0, fetched = 0, accepted = 0, rejected = 0;
+    let circuitCode: string | null = null;
     const failures: string[] = [], candidates: Signal[] = [];
     async function worker() {
       while (next < queries.length) {
         const query = queries[next++]!;
         const began = Date.now();
         try {
+          if (circuitCode) throw new Error(circuitCode);
           deadline.throwIfAborted();
           const payload = await withAbort(transport(query.url, { timeoutMs, signal: deadline, source: definition.source,
             queryId: query.id, minIntervalMs: definition.minIntervalMs ?? 0 }), deadline);
@@ -42,6 +44,9 @@ export function collectSource(definition: Definition, transport: Transport, opti
             accepted: raw.length - invalid, rejected: invalid, durationMs: Date.now() - began });
         } catch (error) {
           const code = errorCode(error); failures.push(code);
+          // Respect provider throttling/access failures for the rest of this
+          // poll. Other sources still run, and valid earlier results survive.
+          if (["HTTP_429", "HTTP_401", "HTTP_403"].includes(code)) circuitCode = code;
           log("warn", "source.query_failed", { source: definition.source, query: query.id, code, durationMs: Date.now() - began });
         }
       }

@@ -7,6 +7,17 @@ import { now } from "./helpers";
 
 const payloads = { gdelt: fixtures.gdelt, bluesky: fixtures.bluesky, hackernews: fixtures.hackernews };
 describe("public source contracts", () => {
+  it("stops remaining throttled-provider requests while other sources continue", async () => {
+    const transport = vi.fn<Transport>().mockImplementation(async (url) => {
+      if (new URL(url).hostname === "api.gdeltproject.org") throw new Error("HTTP_429");
+      return new URL(url).hostname.includes("bsky") ? { posts: [] } : { hits: [] };
+    });
+    const adapters = createAdapters(transport);
+    const results = await Promise.all(sources.map((source) => adapters[source](now, 1000)));
+    expect(transport.mock.calls.filter(([url]) => new URL(url).hostname === "api.gdeltproject.org")).toHaveLength(1);
+    expect(results[0]?.health).toMatchObject({ status: "error", failedQueries: 5, error: "HTTP_429" });
+    expect(results.slice(1).every((result) => result.health.status === "ok")).toBe(true);
+  });
   it.each(sources)("returns the normalized interface, validates siblings and deduplicates overlapping %s queries", async (source) => {
     const result = await createAdapters(async () => payloads[source])[source](now, 1000);
     const queries = source === "gdelt" ? 5 : source === "bluesky" ? 4 : 2;

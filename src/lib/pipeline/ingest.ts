@@ -11,6 +11,7 @@ import { getIngestionEnv } from "@/lib/server/ingestion-env";
 import { log } from "@/lib/server/logger";
 import { deduplicate } from "./normalize";
 import { classifyAI, type Classification } from "./ai";
+import { checkpointCollection } from "@/lib/db/collection-repository";
 
 type Options = {
   repository?: Repository; now?: Date; timeoutMs?: number;
@@ -45,6 +46,10 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
       source: sources[i]!, status: "error", fetched: 0, accepted: 0, rejected: 0, durationMs: 0, checkedAt: now.toISOString(), error: "SOURCE_UNAVAILABLE",
     });
     if (isFixture) health = health.map((s) => ({ ...s, status: s.status === "ok" ? "demo" : s.status }));
+    for (const [index, status] of health.entries()) {
+      const result = results[index]!;
+      await checkpointCollection(repository.client, status, result.status === "fulfilled" ? result.value.signals : [], isFixture, now);
+    }
     const collected = results.flatMap((r) => r.status === "fulfilled" ? r.value.signals : []);
     const unique = deduplicate(isFixture ? collected.map((s) => ({ ...s, id: "fixture-" + s.id })) : collected, existing.items.map(toSignal));
     const topics = new Map(existing.topics.map((t) => [t.slug, t]));
@@ -58,7 +63,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     let enrichmentRun = emptyEnrichmentRun(selected);
     const catalog = await repository.enrichment.activeTopics(now, isFixture);
     const queue = !env.ENRICHMENT_ENABLED ? [] : await repository.enrichment.claimPending(options.now ?? new Date(), isFixture, env.MAX_AI_ITEMS_PER_RUN, lease);
-    const candidates = queue.map(toSignal);
+    let candidates = queue.map(toSignal);
     let classifications = new Map<string, Classification>();
     try { if (candidates.length) classifications = await (options.enrich ?? classifyAI)(candidates, catalog, {
       provider: selected, onReport: (report) => { enrichmentRun = enrichmentRunSchema.parse(report); },
@@ -71,12 +76,40 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
         enrichmentRun.providerErrors++; enrichmentRun.fallbackCount = candidates.length;
       } catch { log("warn", "enrichment.fallback_unavailable", { code: "ENRICHMENT_UNPROCESSED" }); }
     }
+    if (env.ENRICHMENT_ENABLED) {
+      const backlog = await repository.enrichment.pendingForRecovery(options.now ?? new Date(), isFixture, queue.map((item) => item.id));
+      const missing = candidates.filter((signal) => !classifications.has(signal.id));
+      const recovery = [...missing, ...backlog.map(toSignal)].slice(0, 500);
+      if (recovery.length) {
+        // No API client is involved. Exhausted retries and the per-run API cap
+        // cannot strand processable source evidence indefinitely.
+        const recoveryCatalog = [...catalog];
+        for (const classification of classifications.values()) if (classification.topic && !recoveryCatalog.some((topic) => topic.slug === classification.topic!.slug)) recoveryCatalog.push(classification.topic);
+        const recovered = await classifyAI(recovery, recoveryCatalog, { provider: "heuristic" });
+        for (const [id, classification] of recovered) classifications.set(id, classification);
+        candidates = [...candidates, ...backlog.map(toSignal).filter((signal) => recovery.some((item) => item.id === signal.id))];
+        if (selected !== "heuristic") enrichmentRun.fallbackCount += recovered.size;
+        log("info", "enrichment.pending_recovery", { considered: recovery.length, recovered: recovered.size,
+          unresolved: recovery.length - recovered.size, provider: "heuristic" });
+      }
+    }
     const validatedCatalog: EnrichmentTopic[] = [...catalog];
     const assignments: Classification[] = [];
     for (const signal of candidates) {
-      const match = classifications.get(signal.id);
+      let match = classifications.get(signal.id);
       if (!match) continue;
       try {
+        // A recovered proposal can name a topic outside the bounded provider
+        // catalog. Resolve the same validated identity to its durable ID.
+        const stableRecord = records.get(match.result.slug);
+        if (stableRecord && match.topic && match.topic.slug === stableRecord.slug
+          && match.topic.canonical_label === stableRecord.canonicalLabel
+          && editorialCategory[match.topic.category] === stableRecord.category) {
+          const stableTopic = { ...match.topic, id: stableRecord.id };
+          if (!validatedCatalog.some((topic) => topic.id === stableTopic.id)) validatedCatalog.push(stableTopic);
+          match = { ...match, topic: stableTopic, result: { ...match.result,
+            existing_topic_id: match.result.existing_topic_id === match.topic.id ? stableRecord.id : match.result.existing_topic_id } };
+        }
         // Revalidate injected/provider results too; providers have no direct DB access.
         const result = validateEnrichment(match.result, signal, validatedCatalog);
         enrichmentProviderSchema.parse(match.provider);
@@ -118,7 +151,9 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
     if (enrichmentRun.heuristicEnriched) template.notice = [template.notice, `${enrichmentRun.heuristicEnriched} signals used deterministic heuristic topic matching.`].filter(Boolean).join(" ");
     if (enrichmentRun.fallbackCount) {
       if (!isFixture && template.status === "healthy") template.status = "degraded";
-      template.notice = [template.notice, `${selected} enrichment was unavailable for ${enrichmentRun.fallbackCount} signals; local heuristic fallback was used.`].filter(Boolean).join(" ");
+      template.notice = [template.notice, enrichmentRun.providerErrors
+        ? `${selected} enrichment was unavailable; ${enrichmentRun.fallbackCount} signals used local heuristic fallback.`
+        : `${enrichmentRun.fallbackCount} signals used local heuristic recovery outside the API budget or confidence threshold.`].filter(Boolean).join(" ");
     }
     if (!env.ENRICHMENT_ENABLED) template.notice = [template.notice, "Topic enrichment is disabled; collection continues safely."].filter(Boolean).join(" ");
     if (assignments.length < candidates.length) {

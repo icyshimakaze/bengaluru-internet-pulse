@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import type { Client, Transaction } from "@libsql/client";
+import type { Client, Transaction, InStatement } from "@libsql/client";
 import { enrichmentTopicSchema, enrichmentResultSchema, semanticCategorySchema, legacySemanticCategory,
   editorialCategory, validateEnrichment, type EnrichmentAssignment, type EnrichmentTopic } from "@/lib/domain/enrichment";
 import { storedEnrichmentProviderSchema, enrichmentProviderSchema, validProviderModel, modelIdSchema, enrichmentRunSchema } from "@/lib/domain/enrichment-providers";
@@ -63,6 +63,14 @@ export class EnrichmentRepository {
     return row ? enrichmentRecordSchema.parse({ itemId: row.item_id, provider: row.provider, model: row.model,
       result: JSON.parse(String(row.payload)), enrichedAt: row.enriched_at }) : null;
   }
+  async pendingForRecovery(now: Date, isFixture: boolean, excluded: string[]): Promise<ItemRecord[]> {
+    z.date().parse(now); z.boolean().parse(isFixture); z.array(z.string().min(1)).max(30).parse(excluded);
+    const rows = await this.client.execute({ sql: `SELECT * FROM items WHERE is_fixture=?
+      AND enrichment_status IN ('pending','failed') AND published_at<=?
+      AND id NOT IN (SELECT value FROM json_each(?))
+      ORDER BY published_at ASC,id ASC LIMIT 500`, args: [Number(isFixture), now.toISOString(), JSON.stringify(excluded)] });
+    return rows.rows.map(itemFromRow);
+  }
   async recentRuns(mode: "demo" | "live" = "live", limit = 20) {
     z.enum(["demo", "live"]).parse(mode); z.number().int().min(1).max(100).parse(limit);
     const rows = await this.client.execute({ sql: "SELECT captured_at,payload FROM enrichment_runs WHERE mode=? ORDER BY captured_at DESC,rowid DESC LIMIT ?", args: [mode, limit] });
@@ -72,15 +80,19 @@ export class EnrichmentRepository {
 
 export async function applyEnrichments(tx: Transaction, assignments: EnrichmentAssignment[], topics: TopicRecord[], isFixture: boolean, now: Date): Promise<void> {
   if (!assignments.length) return;
+  z.number().int().min(1).max(530).parse(assignments.length);
   const metadata = new Map((await tx.execute({ sql: "SELECT e.topic_id,e.semantic_category FROM topic_enrichments e JOIN topics t ON t.id=e.topic_id WHERE t.is_fixture=?", args: [Number(isFixture)] })).rows.map((r) => [String(r.topic_id), semanticCategorySchema.parse(r.semantic_category)]));
   const proposed = new Map(assignments.flatMap((a) => a.topic ? [[a.topic.id, a.topic.category] as const] : []));
   const catalog = topics.map((t) => enrichmentTopicSchema.parse({ id: t.id, slug: t.slug, canonical_label: t.canonicalLabel,
     category: metadata.get(t.id) ?? proposed.get(t.id) ?? legacySemanticCategory[t.category] }));
+  const rows = await tx.execute({ sql: "SELECT * FROM items WHERE is_fixture=? AND id IN (SELECT value FROM json_each(?))",
+    args: [Number(isFixture), JSON.stringify(assignments.map((assignment) => assignment.result.signal_id))] });
+  const items = new Map(rows.rows.map((row) => { const item = itemFromRow(row); return [item.id, item] as const; }));
+  const statements: InStatement[] = [];
   for (const assignment of assignments) {
     enrichmentProviderSchema.parse(assignment.provider);
-    const row = (await tx.execute({ sql: "SELECT * FROM items WHERE id=? AND is_fixture=?", args: [assignment.result.signal_id, Number(isFixture)] })).rows[0];
-    if (!row) throw new Error("ENRICHMENT_ITEM_MISSING");
-    const item = itemFromRow(row);
+    const item = items.get(assignment.result.signal_id);
+    if (!item) throw new Error("ENRICHMENT_ITEM_MISSING");
     // Terminal items are protected even if a caller accidentally submits one twice.
     if (item.enrichmentStatus === "completed" || item.enrichmentStatus === "irrelevant") continue;
     const result = validateEnrichment(assignment.result, toSignal(item), catalog);
@@ -90,12 +102,15 @@ export async function applyEnrichments(tx: Transaction, assignments: EnrichmentA
     if (result.local_relevance >= 0.5 && (!topic || topic.slug !== result.slug || topic.canonicalLabel !== result.canonical_label || topic.category !== editorialCategory[result.category] ||
       result.existing_topic_id !== null && result.existing_topic_id !== topic.id)) throw new Error("ENRICHMENT_ASSIGNMENT_MISMATCH");
     const neighborhood = result.neighborhood === "Citywide" || result.neighborhood === "Unknown" ? null : result.neighborhood;
-    await tx.execute({ sql: `UPDATE items SET topic_id=?,category=?,neighborhood=?,local_relevance=?,enrichment_status=?,enrichment_provider=?
+    statements.push({ sql: `UPDATE items SET topic_id=?,category=?,neighborhood=?,local_relevance=?,enrichment_status=?,enrichment_provider=?
       WHERE id=? AND is_fixture=? AND enrichment_status IN ('pending','failed')`, args: [topic?.id ?? null, topic?.category ?? null, neighborhood,
       result.local_relevance, result.local_relevance >= 0.5 ? "completed" : "irrelevant", record.provider, item.id, Number(isFixture)] });
-    await tx.execute({ sql: `INSERT INTO item_enrichments(item_id,provider,model,payload,classification_confidence,enriched_at) VALUES (?,?,?,?,?,?)
+    statements.push({ sql: `INSERT INTO item_enrichments(item_id,provider,model,payload,classification_confidence,enriched_at) VALUES (?,?,?,?,?,?)
       ON CONFLICT(item_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,payload=excluded.payload,classification_confidence=excluded.classification_confidence,enriched_at=excluded.enriched_at`,
       args: [record.itemId, record.provider, record.model, JSON.stringify(record.result), record.result.confidence, record.enrichedAt] });
-    if (topic) await tx.execute({ sql: "INSERT INTO topic_enrichments(topic_id,semantic_category) VALUES (?,?) ON CONFLICT(topic_id) DO NOTHING", args: [topic.id, result.category] });
+    if (topic) statements.push({ sql: "INSERT INTO topic_enrichments(topic_id,semantic_category) VALUES (?,?) ON CONFLICT(topic_id) DO NOTHING", args: [topic.id, result.category] });
   }
+  // Validate every assignment first, then apply one bounded batch in the parent
+  // snapshot transaction. Local recovery must not add O(items) network trips.
+  if (statements.length) await tx.batch(statements);
 }

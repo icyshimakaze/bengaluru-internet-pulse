@@ -7,7 +7,7 @@ import { backfillLegacy } from "./legacy-v1";
 
 export type Migration = { version: number; name: string; sql: string };
 export function loadMigrations(): Migration[] {
-  return ["0001_core.sql", "0002_indexes.sql", "0003_dataset_guards.sql", "0004_semantic_enrichment.sql", "0005_trend_scoring_v2.sql", "0006_enrichment_providers.sql"].map((name, i) => ({ version: i + 1, name, sql: readFileSync(join(process.cwd(), "src/lib/db/migrations", name), "utf8") }));
+  return ["0001_core.sql", "0002_indexes.sql", "0003_dataset_guards.sql", "0004_semantic_enrichment.sql", "0005_trend_scoring_v2.sql", "0006_enrichment_providers.sql", "0007_source_collections.sql"].map((name, i) => ({ version: i + 1, name, sql: readFileSync(join(process.cwd(), "src/lib/db/migrations", name), "utf8") }));
 }
 export async function migrate(client: Client, migrations = loadMigrations(), now = new Date()): Promise<{ applied: number[]; version: number }> {
   if (migrations.some((m, i) => m.version !== i + 1)) throw new Error("Migration versions must be contiguous and ordered");

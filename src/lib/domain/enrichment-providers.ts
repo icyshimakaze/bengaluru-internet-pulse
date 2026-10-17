@@ -11,10 +11,11 @@ export function validProviderModel(provider: z.infer<typeof storedEnrichmentProv
     : provider === "xkiro" ? vendorModelIdSchema.safeParse(model).success : modelIdSchema.safeParse(model).success;
 }
 
-const count = z.number().int().min(0).max(30);
+// Up to 30 API candidates plus a bounded 500-item local recovery pass.
+const count = z.number().int().min(0).max(530);
 export const enrichmentRunSchema = z.object({
   selectedProvider: enrichmentProviderSchema, actualProviders: z.array(enrichmentProviderSchema).max(3),
-  attempted: count, aiEnriched: count, heuristicEnriched: count, unprocessed: count,
+  attempted: count, aiEnriched: count.max(30), heuristicEnriched: count, unprocessed: count,
   providerErrors: z.number().int().nonnegative(), fallbackCount: count,
 }).strict().superRefine((v, ctx) => {
   if (v.aiEnriched + v.heuristicEnriched + v.unprocessed !== v.attempted ||

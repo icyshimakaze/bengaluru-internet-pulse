@@ -5,6 +5,7 @@ import { storedPulseSchema, sourceStatusSchema, slugSchema, pulseSchema, type Pu
 import { itemFromRow, topicFromRow, runFromRow, snapshotFromRow } from "./mapping";
 import { DAY } from "./data-repository";
 import { semanticCategorySchema } from "@/lib/domain/enrichment";
+import { readCollections } from "./collection-repository";
 
 const at = (now: Date) => z.date().parse(now).toISOString();
 const sourceRuns = (until: string, fixture: boolean): InStatement => ({
@@ -52,7 +53,7 @@ export class ReadRepository {
     }
     statements.push({ sql: `SELECT e.topic_id,e.semantic_category FROM topic_enrichments e
       JOIN topics t ON t.id=e.topic_id WHERE t.is_fixture=?`, args: [Number(fixture)] });
-    const rows = await this.client.batch(statements, "read");
+    const [rows, collections] = await Promise.all([this.client.batch(statements, "read"), readCollections(this.client, now, fixture)]);
     const snapshot = rows[0]!.rows[0];
     const parsed = snapshot ? storedPulseSchema.parse(JSON.parse(String(snapshot.payload))) : null;
     if (parsed && (parsed.mode !== mode || parsed.generatedAt !== snapshot!.captured_at)) throw new Error("SNAPSHOT_IDENTITY_MISMATCH");
@@ -62,7 +63,7 @@ export class ReadRepository {
     if (requestedTopic && !topics.some((t) => t.id === requestedTopic.id)) topics.push(topicFromRow(requestedTopic));
     const semanticCategories = z.record(z.string().min(1), semanticCategorySchema).parse(
       Object.fromEntries(rows.at(-1)!.rows.map((r) => [z.string().parse(r.topic_id), semanticCategorySchema.parse(r.semantic_category)])));
-    return { mode, loadedAt: until, snapshot: parsed,
+    return { mode, loadedAt: until, snapshot: parsed, collections,
       semanticCategories,
       topics, items: rows[2]!.rows.map(itemFromRow), sourceRuns: rows[3]!.rows.map(runFromRow),
       lastIngestion: rows[4]!.rows[0] ? runFromRow(rows[4]!.rows[0]) : null,
@@ -72,20 +73,20 @@ export class ReadRepository {
 
   async health(now: Date) {
     const until = at(now);
-    const rows = await this.client.batch([
+    const [rows, collections] = await Promise.all([this.client.batch([
       "SELECT 1 AS connected",
       { sql: `SELECT captured_at,json_extract(payload,'$.sources') AS sources,json_extract(payload,'$.mode') AS data_mode,
         json_extract(payload,'$.generatedAt') AS generated_at,json_extract(payload,'$.status') AS status FROM pulse_snapshots
         WHERE mode='live' AND captured_at<=? ORDER BY captured_at DESC,rowid DESC LIMIT 1`, args: [until] },
       sourceRuns(until, false), lastRun(until, false), lastRun(until, false, true),
       { sql: "SELECT count(*) AS count FROM items WHERE is_fixture=0 AND published_at>=? AND published_at<=?", args: [new Date(now.getTime() - DAY).toISOString(), until] },
-    ], "read");
+    ], "read"), readCollections(this.client, now, false)]);
     z.literal(1).parse(rows[0]!.rows[0]?.connected);
     const snapshot = rows[1]!.rows[0];
     if (snapshot && (snapshot.data_mode !== "live" || snapshot.generated_at !== snapshot.captured_at)) throw new Error("SNAPSHOT_IDENTITY_MISMATCH");
     return { ...(snapshot ? { collectionStatus: pulseSchema.shape.status.parse(snapshot.status) } : {}),
       generatedAt: snapshot ? z.iso.datetime().parse(snapshot.captured_at) : null,
-      sources: snapshot ? z.array(sourceStatusSchema).parse(JSON.parse(String(snapshot.sources))) : [],
+      sources: snapshot ? z.array(sourceStatusSchema).parse(JSON.parse(String(snapshot.sources))) : [], collections,
       sourceRuns: rows[2]!.rows.map(runFromRow), lastIngestion: rows[3]!.rows[0] ? runFromRow(rows[3]!.rows[0]) : null,
       lastSuccessfulIngestion: rows[4]!.rows[0] ? runFromRow(rows[4]!.rows[0]) : null,
       recentSignalCount: z.number().int().nonnegative().parse(rows[5]!.rows[0]?.count) };

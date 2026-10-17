@@ -3,6 +3,7 @@ import { categorySchema, sourceSchema, sourceTypeSchema, slugSchema, neighborhoo
   trendSchema, pulseSchema, hotspotSchema, sourceStatusSchema, trendLifecycleSchema } from "./schema";
 import { semanticCategorySchema } from "./enrichment";
 import { storedEnrichmentProviderSchema } from "./enrichment-providers";
+import { sourceHealthStateSchema } from "./source-health";
 
 // Retain the original editorial buckets for existing API consumers.
 export const readCategorySchema = z.union([semanticCategorySchema, categorySchema]);
@@ -10,6 +11,9 @@ export const readQuerySchema = z.object({ window: z.enum(["2h", "6h", "24h"]).de
   category: readCategorySchema.optional(), source: sourceSchema.optional() }).strict();
 export type ReadQuery = z.infer<typeof readQuerySchema>;
 export type ReadQueryInput = z.input<typeof readQuerySchema>;
+export const dashboardQuerySchema = readQuerySchema.extend({ window: z.enum(["now", "2h", "6h", "24h"]).default("now") });
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
+export type DashboardQueryInput = z.input<typeof dashboardQuerySchema>;
 export const topicListQuerySchema = readQuerySchema.extend({ q: z.string().max(100).optional(), lifecycle: trendLifecycleSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50) }).strict();
 export type TopicListQuery = z.infer<typeof topicListQuerySchema>;
@@ -24,7 +28,12 @@ export const publicTopicSchema = trendSchema.omit({ method: true, currentCount: 
     neighborhood: neighborhoodSchema.nullable() }).strict();
 export type PublicTopic = z.infer<typeof publicTopicSchema>;
 export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).extend({ stale: z.boolean(),
-  ingestionStatus: z.enum(["running", "completed", "partial", "failed", "abandoned"]).nullable() }).strict();
+  ingestionStatus: z.enum(["running", "completed", "partial", "failed", "abandoned"]).nullable(),
+  healthState: sourceHealthStateSchema,
+  lastAttemptAt: z.iso.datetime().nullable(), lastSuccessAt: z.iso.datetime().nullable(), lastItemAt: z.iso.datetime().nullable(),
+  lastErrorAt: z.iso.datetime().nullable(), lastErrorType: z.string().regex(/^[A-Z][A-Z0-9_]{0,79}$/u).nullable(),
+  itemsLastRun: z.number().int().nonnegative(),
+}).strict();
 export const publicRunSchema = z.object({ source: sourceSchema, startedAt: z.iso.datetime(), finishedAt: z.iso.datetime().nullable(),
   status: z.enum(["running", "completed", "partial", "failed", "abandoned"]), discovered: z.number().int().nonnegative(),
   inserted: z.number().int().nonnegative(), duplicates: z.number().int().nonnegative(), errors: z.number().int().nonnegative() }).strict();
@@ -37,6 +46,7 @@ export const publicHotspotSchema = hotspotSchema.extend({ activity: z.number().i
   topTopic: z.object({ slug: slugSchema, title: z.string(), pulseScore: z.number().min(0).max(100) }).strict() }).strict();
 export type PublicHotspot = z.infer<typeof publicHotspotSchema>;
 export const dashboardSchema = pulseSchema.omit({ trends: true, hotspots: true, sources: true }).extend({
+  requestedWindow: dashboardQuerySchema.shape.window,
   window: readQuerySchema.shape.window, filters: z.object({ category: readCategorySchema.nullable(), source: sourceSchema.nullable() }).strict(),
   topTopics: z.array(publicTopicSchema).max(50), risingTopics: z.array(publicTopicSchema).max(50),
   topicsTruncated: z.boolean(), sourceStream: z.array(publicSignalSchema).max(30), streamTruncated: z.boolean(),

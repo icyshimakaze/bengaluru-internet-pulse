@@ -39,7 +39,8 @@ export async function classifyAI(input: Signal[], inputCatalog: EnrichmentTopic[
   const env = getIngestionEnv(), selected = enrichmentProviderSchema.parse(options.provider ?? env.ENRICHMENT_PROVIDER);
   const report = emptyEnrichmentRun(selected);
   if (!input.length || !env.ENRICHMENT_ENABLED) { options.onReport?.(report); return result; }
-  const signals = input.slice(0, env.MAX_AI_ITEMS_PER_RUN).map((s) => signalSchema.parse(s));
+  // The paid-provider cap must not starve the free local recovery queue.
+  const signals = input.slice(0, selected === "heuristic" ? 500 : env.MAX_AI_ITEMS_PER_RUN).map((s) => signalSchema.parse(s));
   const catalog = inputCatalog.slice(0, 50).map((t) => enrichmentTopicSchema.parse(t));
   report.attempted = signals.length;
   const deadline = AbortSignal.timeout(Math.min(15000, Math.max(1, options.deadlineMs ?? 15000)));
@@ -78,17 +79,35 @@ export async function classifyAI(input: Signal[], inputCatalog: EnrichmentTopic[
     }
     try {
       const valid = items ?? validateBatch({ items: await actual.enrich(batch, catalog, { signal: deadline }) }, batch, catalog);
-      for (const item of valid) {
+      for (const proposed of valid) {
+        let item = proposed, itemProvider = actual;
+        if (item.confidence < (item.existing_topic_id ? 0.75 : 0.6) && actual.name !== "heuristic") {
+          const source = batch.find((s) => s.id === item.signal_id)!;
+          item = validateBatch({ items: await heuristic.enrich([source], catalog, { signal: deadline }) }, [source], catalog)[0]!;
+          itemProvider = heuristic; report.fallbackCount++;
+          log("info", "enrichment.low_confidence_recovered", { selectedProvider: selected, fallback: "heuristic", count: 1 });
+        }
         if (item.confidence < (item.existing_topic_id ? 0.75 : 0.6)) continue;
         let topic = catalog.find((t) => t.id === item.existing_topic_id || t.slug === item.slug);
         if (item.local_relevance >= 0.5 && !topic) {
           topic = enrichmentTopicSchema.parse({ id: randomUUID(), slug: item.slug, canonical_label: item.canonical_label, category: item.category });
           catalog.push(topic);
         }
-        result.set(item.signal_id, { result: item, topic: item.local_relevance >= 0.5 ? topic! : null, provider: actual.name, model: actual.model });
+        result.set(item.signal_id, { result: item, topic: item.local_relevance >= 0.5 ? topic! : null, provider: itemProvider.name, model: itemProvider.model });
       }
     } catch {
       log("warn", "enrichment.batch_unprocessed", { provider: actual.name, count: batch.length, code: "ENRICHMENT_HEURISTIC_REJECTED" });
+      if (actual.name === "heuristic" && batch.length > 1) {
+        // Isolate an unprocessable item so it cannot hold valid siblings in
+        // the local recovery queue. Single-item failures remain unresolved.
+        for (const signal of batch) {
+          const recovered = await classifyAI([signal], catalog, { provider: "heuristic" });
+          const assignment = recovered.get(signal.id);
+          if (!assignment) continue;
+          result.set(signal.id, assignment);
+          if (assignment.topic && !catalog.some((topic) => topic.id === assignment.topic!.id)) catalog.push(assignment.topic);
+        }
+      }
     }
   }
   report.actualProviders = [...new Set([...result.values()].map((a) => a.provider))];

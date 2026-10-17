@@ -37,6 +37,27 @@ async function setup() {
   return { repo, signals, reads: new ReadRepository(repo.client) };
 }
 describe("database-backed read service", () => {
+  it("reads through an over-age cache instead of returning a stale snapshot after new collection", async () => {
+    const { reads } = await setup(), fresh = await reads.load(now);
+    const load = vi.spyOn(ReadRepository.prototype, "load")
+      .mockResolvedValueOnce({ ...fresh, loadedAt: new Date(now.getTime() - 60_000).toISOString() })
+      .mockResolvedValueOnce(fresh);
+    const data = await readDashboard({ window: "2h" });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(data.snapshot).toMatchObject({ capturedAt: now.toISOString(), cacheAgeSeconds: 0, refreshDelayed: false });
+    expect(data.topTopics).toHaveLength(1);
+  });
+  it("keeps validated evidence with a delay notice if the direct cache recovery read fails", async () => {
+    const { reads } = await setup(), fresh = await reads.load(now);
+    vi.spyOn(ReadRepository.prototype, "load")
+      .mockResolvedValueOnce({ ...fresh, loadedAt: new Date(now.getTime() - 60_000).toISOString() })
+      .mockRejectedValueOnce(new Error("PRIVATE_DB_DETAIL"));
+    const data = await readDashboard({ window: "2h" });
+    expect(data.snapshot.refreshDelayed).toBe(true);
+    expect(data.topTopics).toHaveLength(1);
+    expect(data.notice).toContain("Snapshot refresh is delayed");
+    expect(JSON.stringify(data)).not.toContain("PRIVATE_DB_DETAIL");
+  });
   it("separates persisted caches by database using opaque keys rather than URLs or credentials", async () => {
     await setup();
     await readDashboard(); await readTopic(topic.slug);
@@ -90,8 +111,8 @@ describe("database-backed read service", () => {
     expect(detail?.history).toHaveLength(1);
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0]![0]).toHaveLength(7);
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute.mock.calls[0]![0]).toMatchObject({ sql: expect.stringContaining("LIMIT 97") });
+    expect(execute).toHaveBeenCalledTimes(3);
+    for (const sql of ["sqlite_master", "source_collections", "LIMIT 97"]) expect(JSON.stringify(execute.mock.calls)).toContain(sql);
   });
   it("anchors separately loaded history to its parent snapshot and rejects invalid bounds before SQL", async () => {
     const { repo, reads, signals } = await setup();
@@ -245,7 +266,7 @@ describe("database-backed read service", () => {
     const dashboard = projectDashboard(state, { window: "2h" }, later);
     expect(dashboard).toMatchObject({ status: "degraded", generatedAt: now.toISOString(), stale: false,
       snapshot: { cacheAgeSeconds: 31, refreshDelayed: true } });
-    expect(dashboard.notice).toContain("cached");
+    expect(dashboard.notice).toContain("showing the last available snapshot");
   });
   it("filters the full topic set before limiting and retains the 100-topic list contract", async () => {
     const repo = testRepository(); await repo.initialize(); vi.mocked(getDatabase).mockReturnValue(repo.client);

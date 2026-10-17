@@ -12,6 +12,9 @@ describe("read projection performance", () => {
     expect(projectDashboard(state, { window: "2h" }, FIXTURE_NOW).topTopics).toHaveLength(6);
     expect(evaluate).toHaveBeenCalledTimes(1);
     evaluate.mockClear();
+    expect(projectDashboard(state, { window: "now" }, FIXTURE_NOW).topTopics).toHaveLength(6);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    evaluate.mockClear();
     expect(projectTopicList(state, { window: "2h", limit: 50 }, FIXTURE_NOW).total).toBe(6);
     expect(evaluate).toHaveBeenCalledTimes(1);
     evaluate.mockClear();

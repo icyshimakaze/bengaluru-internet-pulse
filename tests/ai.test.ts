@@ -31,6 +31,15 @@ function select(provider: EnrichmentProviderName) {
 afterEach(() => { vi.unstubAllEnvs(); parse.mockReset(); create.mockReset(); construct.mockReset(); vi.restoreAllMocks(); });
 
 describe("three enrichment providers and safe fallback", () => {
+  it("recovers low-confidence API matches with the genuine heuristic and records actual provenance", async () => {
+    select("xkiro"); const signal = observation("low-confidence");
+    create.mockResolvedValue(chat([item(signal, { confidence: 0.4 })]));
+    const report = vi.fn();
+    const result = await classifyAI([signal], [active], { onReport: report });
+    expect(result.get(signal.id)).toMatchObject({ provider: "heuristic", model: null, topic: active });
+    expect(report).toHaveBeenCalledWith(expect.objectContaining({ selectedProvider: "xkiro", fallbackCount: 1, heuristicEnriched: 1, unprocessed: 0 }));
+    expect(create).toHaveBeenCalledTimes(1); expect(parse).not.toHaveBeenCalled();
+  });
   it("defaults to a genuine offline heuristic even when both API keys exist", async () => {
     select("heuristic"); const signal = observation("a");
     const result = await classifyAI([signal], [active]);
