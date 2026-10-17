@@ -17,8 +17,8 @@ const recordMediaSchema = z.object({ media: externalSchema });
 export function blueskyQueries(now: Date): SourceQuery[] {
   // Search is unavailable on the cached public host (403); the official AppView
   // serves this public query without account credentials.
-  return ["Bengaluru", "Bangalore", "Namma Metro", "ಬೆಂಗಳೂರು"].map((q, i) => ({ id: "search-" + i, limit: 50,
-    url: "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?" + new URLSearchParams({ q, sort: "latest", limit: "50",
+  return ["Bengaluru", "Bangalore", "Namma Metro", "ಬೆಂಗಳೂರು", "Whitefield", "Koramangala", "Indiranagar", "HSR Layout", "Bellandur", "Electronic City"].map((q, i) => ({ id: "search-" + i, limit: i < 2 ? 100 : 50,
+    url: "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?" + new URLSearchParams({ q, sort: "latest", limit: i < 2 ? "100" : "50",
       since: new Date(now.getTime() - 86400000).toISOString(), until: now.toISOString() }) }));
 }
 export function createBlueskyAdapter(transport: Transport = fetchJson, options: AdapterOptions = {}) {

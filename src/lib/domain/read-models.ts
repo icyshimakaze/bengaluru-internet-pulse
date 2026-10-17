@@ -27,6 +27,9 @@ export const publicTopicSchema = trendSchema.omit({ method: true, currentCount: 
   .extend({ activityCount: z.number().int().nonnegative(), semanticCategory: semanticCategorySchema,
     neighborhood: neighborhoodSchema.nullable() }).strict();
 export type PublicTopic = z.infer<typeof publicTopicSchema>;
+export const recentConversationSchema = z.object({ slug: slugSchema, title: z.string().min(3).max(100),
+  category: semanticCategorySchema, neighborhood: neighborhoodSchema.nullable(), latestAt: z.iso.datetime(),
+  signalCount: z.number().int().positive(), sources: z.array(sourceSchema).min(1).max(3) }).strict();
 export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).extend({ stale: z.boolean(),
   ingestionStatus: z.enum(["running", "completed", "partial", "failed", "abandoned"]).nullable(),
   healthState: sourceHealthStateSchema,
@@ -49,6 +52,7 @@ export const dashboardSchema = pulseSchema.omit({ trends: true, hotspots: true, 
   requestedWindow: dashboardQuerySchema.shape.window,
   window: readQuerySchema.shape.window, filters: z.object({ category: readCategorySchema.nullable(), source: sourceSchema.nullable() }).strict(),
   topTopics: z.array(publicTopicSchema).max(50), risingTopics: z.array(publicTopicSchema).max(50),
+  recentConversations: z.array(recentConversationSchema).max(8).default([]),
   topicsTruncated: z.boolean(), sourceStream: z.array(publicSignalSchema).max(30), streamTruncated: z.boolean(),
   signalCount: z.number().int().nonnegative(), snapshot: snapshotInfoSchema,
   lastSuccessfulIngestion: z.iso.datetime().nullable(), availableSources: z.array(sourceSchema),

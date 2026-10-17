@@ -30,21 +30,19 @@ describe("transactional pipeline", () => {
     const repo = repository();
     const collected = createAdapters(async (value) => {
       const url = new URL(value);
-      if (url.hostname === "api.gdeltproject.org") {
-        if (url.searchParams.get("query")?.includes("airport")) throw new Error("HTTP_503");
-        return fixtures.gdelt;
-      }
+      if (url.hostname === "api.gdeltproject.org") return fixtures.gdelt;
+      if (url.hostname === "api.bsky.app" && url.searchParams.get("q") === "Electronic City") throw new Error("HTTP_503");
       return url.hostname === "api.bsky.app" ? fixtures.bluesky : fixtures.hackernews;
     });
     const first = await ingest({ repository: repo, now, adapters: collected, timeoutMs: 1000, enrich: mock });
     expect(first.added).toBe(3);
     expect(first.pulse?.status).toBe("degraded");
-    expect(first.runs.find((r) => r.source === "gdelt")).toMatchObject({ status: "partial", discovered: 8, inserted: 1, duplicates: 3, errors: 5 });
-    expect(first.pulse?.sources.find((s) => s.source === "gdelt")).toMatchObject({ status: "partial", failedQueries: 1, duplicates: 3 });
-    expect((await repo.ingestionStatus({ source: "gdelt" }))[0]).toMatchObject({ status: "partial", discovered: 8, inserted: 1, duplicates: 3, errors: 5, errorMessage: "PARTIAL_QUERY_FAILURE" });
+    expect(first.runs.find((r) => r.source === "bluesky")).toMatchObject({ status: "partial", discovered: 18, inserted: 1, duplicates: 8, errors: 10 });
+    expect(first.pulse?.sources.find((s) => s.source === "bluesky")).toMatchObject({ status: "partial", failedQueries: 1, duplicates: 8 });
+    expect((await repo.ingestionStatus({ source: "bluesky" }))[0]).toMatchObject({ status: "partial", discovered: 18, inserted: 1, duplicates: 8, errors: 10, errorMessage: "PARTIAL_QUERY_FAILURE" });
     const repeat = await ingest({ repository: repo, now, adapters: collected, timeoutMs: 1000, enrich: mock });
     expect(repeat.added).toBe(0);
-    expect((await repo.ingestionStatus({ source: "gdelt" }))[0]).toMatchObject({ inserted: 0, duplicates: 4 });
+    expect((await repo.ingestionStatus({ source: "bluesky" }))[0]).toMatchObject({ inserted: 0, duplicates: 9 });
     const data = await repo.load(now);
     expect(data.items).toHaveLength(3);
     expect(data.observations).toHaveLength(3);
@@ -57,7 +55,7 @@ describe("transactional pipeline", () => {
     expect(result).toMatchObject({ skipped: false, added: 0, pulse: { status: "unavailable", trends: [], totalSignals: 0 } });
     const runs = await repo.ingestionStatus();
     expect(runs.every((r) => r.status === "failed" && r.inserted === 0)).toBe(true);
-    expect(runs.map((r) => r.errors).sort()).toEqual([2, 4, 5]);
+    expect(runs.map((r) => r.errors).sort((a, b) => a - b)).toEqual([1, 2, 10]);
     expect((await repo.latest())?.status).toBe("unavailable");
   });
   it("runs public-source fixtures through isolated demo persistence", async () => {

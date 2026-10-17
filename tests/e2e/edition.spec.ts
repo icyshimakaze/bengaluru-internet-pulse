@@ -1,6 +1,26 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test("recent conversations expose early evidence separately from momentum and follow search", async ({ page, request }) => {
+  const stored = await (await request.get("/api/pulse")).json();
+  const early = stored.topTopics[1];
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: { ...stored, topTopics: stored.topTopics.slice(0, 1), recentConversations: [{
+    slug: early.slug, title: early.title, category: early.semanticCategory, neighborhood: early.neighborhood,
+    latestAt: stored.evaluatedAt, signalCount: 1, sources: ["gdelt"],
+  }] } }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  const recent = page.getByRole("region", { name: "Recently observed" });
+  await expect(recent).toContainText("1 signal / 24H");
+  await expect(page.locator(".trend-entry")).toHaveCount(1);
+  await expect(recent.getByRole("link", { name: early.title })).toHaveAttribute("href", `/topic/${early.slug}`);
+  await expect(recent).not.toContainText("Pulse Score");
+  await page.getByRole("searchbox", { name: "Search topics" }).fill("query-with-no-matching-conversation");
+  await expect(recent).toHaveCount(0);
+  await page.getByRole("searchbox", { name: "Search topics" }).fill("");
+  await expect(recent).toBeVisible();
+});
+
 test("NOW widens quiet windows honestly and explicit selections stay fixed", async ({ page, request }) => {
   const stored = await (await request.get("/api/pulse?window=6h")).json();
   await page.goto("/");

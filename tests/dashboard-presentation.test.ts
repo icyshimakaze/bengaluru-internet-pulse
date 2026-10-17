@@ -42,6 +42,25 @@ describe("truthful dashboard status", () => {
   });
 });
 describe("homepage taxonomy and fixture history", () => {
+  it("makes a deduplicated singleton discoverable without promoting it into momentum, and honors filters", () => {
+    const state = demoReadState(FIXTURE_NOW);
+    const food = state.topics.find((topic) => topic.slug === "food-and-cafes")!;
+    const item = state.items.find((item) => item.topicId === food.id)!;
+    const changed = { ...state, items: state.items.filter((row) => row.topicId !== food.id).concat([
+      item, { ...item, id: "duplicate-early-mention" },
+      { ...item, id: "pending-early-mention", enrichmentStatus: "pending" as const },
+      { ...item, id: "future-early-mention", publishedAt: new Date(now + 60000).toISOString() },
+    ]) };
+    const result = projectDashboard(changed, { window: "2h" }, FIXTURE_NOW);
+    expect(result.topTopics.some((topic) => topic.slug === food.slug)).toBe(false);
+    expect(result.recentConversations).toContainEqual(expect.objectContaining({ slug: food.slug, signalCount: 1, sources: [item.source] }));
+    expect(result.recentConversations.every((topic) => !result.topTopics.some((ranked) => ranked.slug === topic.slug))).toBe(true);
+    expect(projectDashboard(changed, { window: "2h", category: "traffic" }, FIXTURE_NOW).recentConversations.some((topic) => topic.slug === food.slug)).toBe(false);
+    const otherSource = item.source === "gdelt" ? "bluesky" : "gdelt";
+    expect(projectDashboard(changed, { window: "2h", source: otherSource }, FIXTURE_NOW).recentConversations.some((topic) => topic.slug === food.slug)).toBe(false);
+    expect(projectDashboard({ ...changed, snapshot: null }, { window: "2h" }, FIXTURE_NOW).recentConversations).toEqual([]);
+    expect(projectDashboard(changed, { window: "2h" }, new Date(now + 48 * 3600000)).recentConversations).toEqual([]);
+  });
   it("filters canonical categories consistently across rankings, stream and hotspots", () => {
     const state = demoReadState(FIXTURE_NOW);
     const food = projectDashboard(state, readQuerySchema.parse({ category: "food", window: "6h" }), FIXTURE_NOW);

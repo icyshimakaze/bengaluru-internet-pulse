@@ -503,6 +503,23 @@ main.shell { min-height: 60vh; }
   .stream-kind-controls { gap: 15px; }
   .topic-title-block h1 { font-size: 35px; }
 }
+.ranking-coverage-note { margin: -6px 0 20px; color: var(--foreground-muted); font-size: 12px; line-height: 1.7; max-width: 80ch; }
+.recent-conversations { border-top: 1px solid var(--border-strong); padding-block: 28px 34px; }
+.recent-conversations .editorial-section-heading { margin-bottom: 24px; }
+.recent-conversation-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; list-style: none; padding: 0; margin: 0; }
+.recent-conversation-list > li { border-top: 1px solid var(--border); padding-top: 16px; min-width: 0; }
+.recent-conversation-list .topic-kicker { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; }
+.recent-conversation-list h3 { font-size: 21px; line-height: 1.3; letter-spacing: -.45px; margin: 14px 0; overflow-wrap: anywhere; }
+.recent-conversation-list h3 a { display: inline; }
+.recent-conversation-list h3 svg { display: inline-block; margin-left: 6px; color: var(--accent); }
+.recent-conversation-list p, .recent-conversation-place { font-size: 11px; line-height: 1.7; color: var(--foreground-muted); }
+@media (max-width: 1100px) { .recent-conversation-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .recent-conversation-list { grid-template-columns: 1fr; gap: 12px; }
+  .recent-conversation-list h3 { font-size: 22px; }
+  .recent-conversations .editorial-section-heading { align-items: flex-start; gap: 16px; }
+  .recent-conversations .panel-overline { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
