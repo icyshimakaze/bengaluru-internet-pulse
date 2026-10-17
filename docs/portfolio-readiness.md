@@ -33,3 +33,11 @@ Lint, typecheck, standard `npm test` (495 tests in 35 files), production build a
 The configured local database was readable but had zero items. A separately isolated, keyless collection into `.data/portfolio-eval.db` made no model calls and returned zero evidence: GDELT timed out after two attempts, all ten Bluesky queries had network failures, and HN returned valid empty results. No production database was changed. The existing local audit archive was then verified to contain 173 non-fixture Bluesky items dated 13–15 October 2026. `eval:sample` exported 150 random redacted rows from that archive, with 150 matching prediction records and all four truth columns empty. A scan found no remaining common DID/profile/@handle patterns. Both files are ignored by Git; the sidecar explicitly records the archive scope and older stored assignments. This is not a current-pipeline accuracy result.
 
 The backtest CLI read the configured database and generated an honest empty Markdown/CSV timeline for `namma-metro`. Neither it nor the audit archive had topic snapshots available for a real case study. The template remains unfilled; fixture tests verify exact saved values, gaps and version separation without presenting synthetic numbers as findings.
+
+## Phase 4 final verification
+
+The clean `npm ci`, lint, typecheck, 495 unit tests in 35 files, production build and all 37 Playwright tests passed. The final unit run uses `--maxWorkers=2` after an intermittent native Windows fork exit; it has no skipped tests or unhandled errors. The final screenshot command passed against the final build and the actual PNGs were visually inspected. Their mastheads and topic chart are intact; demo/fictional labels are visible. Local documentation links passed inspection. The previous README's complete source is preserved separately; unrelated pre-existing assets/recruiter notes remain uncommitted.
+
+The full npm audit still reports five existing high development-tool advisories in the Next ESLint configuration chain; the proposed automated fix is a semver-major downgrade to 14.2.35, which was not applied. `npm audit --omit=dev` reported zero production advisories. These are dated dependency checks, not a security certification.
+
+[Final delivery report, all 16 author placeholders, all 131 unverified localities and required manual actions](portfolio-report.md).

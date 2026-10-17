@@ -1,113 +1,77 @@
 # Bengaluru Pulse
 
-**The city's internet, compressed into one pulse.**
+A momentum detector for Bengaluru's public internet, with source evidence behind each topic and score.
 
-A momentum detector for Bengaluru's public internet. GDELT, Bluesky public AppView and Hacker News Algolia feed a validated, deduplicated pipeline. A deterministic engine ranks rising topics; every score links to its evidence and component weights.
+[Live site](https://bengaluru-internet-pulse.vercel.app) · [Methodology](docs/trend-algorithm.md) · [Verification](docs/portfolio-readiness.md)
 
-Scoring v2 compares the current two hours with the previous two hours. Bounded velocity (40%), logarithmic volume (25%), source diversity (20%) and recency (15%) produce a 0–100 Pulse Score. Confidence is separate; duplicate, single-source and sparse-evidence guardrails prevent inflated momentum. Six deterministic lifecycle states and versioned ingestion snapshots make changes inspectable. All equations and thresholds are in [Trend algorithm](docs/trend-algorithm.md).
+![Actual demo-mode homepage with explicitly fictional evidence](docs/images/homepage.png)
+![Actual demo-mode topic brief with recorded fixture score history](docs/images/topic.png)
 
-## Run
+These are real browser captures of the **fictional demo**, not live evidence. Reproduce them with `npm run build` then `npm run screenshot`; [capture details](docs/images/README.md).
 
-Node.js 22.13 or later.
+## Why I built it
+
+- TODO(author): describe the Bengaluru question that prompted this project.
+- TODO(author): describe the use case you wanted to explore.
+- TODO(author): explain your contribution and what you learned, in your own words.
+
+## How it works
+
+Public source metadata is validated and deduplicated, then grouped into topics. A local heuristic is the free default; OpenAI and xKiro remain optional. Only the deterministic engine assigns scores, confidence and lifecycle. Public reads use stored snapshots and never start ingestion.
+
+```mermaid
+flowchart LR
+  cron[GitHub Actions cron] --> worker[Server-only ingestion]
+  worker --> sources[Public APIs and optional RSS]
+  sources --> validation[Zod validation, deduplication, filter flags]
+  validation --> enrichment[Heuristic or optional semantic API]
+  enrichment --> scoring[Deterministic scoring]
+  scoring --> storage[Turso / local libSQL]
+  storage --> api[Read-only API]
+  api --> ui[Next.js UI]
+```
+
+Scores compare successive two-hour windows using the existing 40/25/20/15 weights for velocity, volume, channel diversity and recency. Sparse evidence is capped; confidence is separate. Jobs and rule-filtered noise stay stored with reasons and do not enter momentum scoring. [Equations and limits](docs/trend-algorithm.md).
+
+## Key results
+
+<!-- EVALUATION_START -->
+**Results: TBD (awaiting hand-labeled sample).** [Evaluation method and limits](docs/evaluation.md).
+<!-- EVALUATION_END -->
+
+`npm run eval:sample` prepares empty human labels; `npm run eval` updates the measured tables only after labeling. Synthetic fixtures test the evaluator and never count as project results. [Stored-timeline case-study template](docs/case-study-template.md).
+
+## Tech stack
+
+Next.js App Router · React · strict TypeScript · Zod · Turso/libSQL · Tailwind · Recharts/Leaflet · Vitest · Playwright/axe · GitHub Actions · Vercel.
+
+## Run locally
+
+Node.js 22.13+. The default labeled demo needs no accounts, keys or database setup.
 
 ```sh
 npm ci
-npm run dev
-```
-
-Open `http://localhost:3000`. The default **demo mode** uses explicitly fictional fixtures, runs the actual scoring engine, and needs no accounts or environment file. `/topic/namma-metro` shows scoring and evidence; `/about` documents methodology and limitations.
-
-## Local live collection
-
-Copy `.env.example` to `.env.local`, set `APP_DATA_MODE=live`, keep `ENRICHMENT_PROVIDER=heuristic` and `TURSO_DATABASE_URL=file:.data/pulse.db`. No source or enrichment API keys are needed. Run:
-
-```sh
-npm run db:migrate
-npm run ingest
-npm run dev
-```
-
-The ingestion command automatically migrates the schema too. Poll regularly to build a baseline; first-run rankings have limited history. Public sources can fail or return no matches. Live mode always reports these conditions and never substitutes demo evidence.
-
-`npm run ingest` also works without an environment file, defaulting to local `.data/pulse.db` and **free heuristic enrichment**. For an offline end-to-end collection check, run `npm run ingest -- --fixtures`; it uses the same three adapters and enrichment/persistence pipeline with fictional payloads in separate `.data/ingestion-fixtures.db`. It forces the genuine local heuristic, makes no source or model API requests, and cannot seed the configured remote database.
-
-## Checks
-
-```sh
-npm run lint
-npm test
 npm run build
-npm run typecheck
-npx playwright install chromium
-npm run test:e2e
+npm start
 ```
 
-Vitest uses injected time, public API fixtures and isolated real libSQL databases, including migrations, rollback, duplicate identities and retention boundaries. Playwright verifies routes, filters, demo labeling, API authorization, narrow layouts and WCAG A/AA checks. CI runs the same checks with Node 22.
+Open [localhost:3000](http://localhost:3000). For development use `npm run dev`. [Collected-data setup, environment variables and deployment](docs/deployment.md).
 
-## Local persistence fixtures
+## Review the engineering
 
-`npm run db:seed` migrates and seeds a separate `.data/seed.db` with 221 fictional items, six topics, deterministic topic snapshots and per-source ingestion runs. It deliberately ignores the live database environment setting. Repeating the seed does not duplicate items or topic history. Fixture markers keep seeded evidence out of default live repository queries; the dashboard's default demo already works without a database.
+- [Architecture and boundaries](docs/architecture.md) · [decisions](docs/decisions.md)
+- [Sources, failures, filters and RSS terms](docs/data-sources.md) · [locality verification](docs/neighborhoods.md)
+- [Semantic enrichment and provenance](docs/enrichment.md) · [atomic persistence and retention](docs/persistence.md)
+- [Public API and compatibility](docs/read-api.md) · [topic briefs](docs/topic-detail.md)
+- [Checks and remaining external limits](docs/portfolio-readiness.md) · [contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
 
-Numbered migrations and validated repository operations live in `src/lib/db`. `npm run db:migrate` defaults to `.data/pulse.db` when no database URL is configured. Items retain 14 days of evidence; topic and dashboard snapshots retain 30 days. Existing JSON storage is upgraded transactionally. See [Persistence](docs/persistence.md) for schemas, migration behavior and query contracts.
+The previous README's full source is [preserved](docs/readme-before-portfolio.md), including earlier deployment, API, semantic, performance and shipping notes. Current contracts and verification take precedence over historical status observations.
 
-## Deployment
+## Known limitations and roadmap
 
-Import this repository into Vercel as a Next.js project. The live web deployment requires exactly two user-configured environment variables in Vercel's encrypted Production settings:
-
-| Variable | Value |
-| --- | --- |
-| `TURSO_DATABASE_URL` | The remote `libsql://...` or `https://...` Turso URL |
-| `TURSO_AUTH_TOKEN` | The database token used for server-side reads |
-
-Vercel's platform-provided `VERCEL` flag or a configured database defaults the application to **live** mode. `APP_DATA_MODE` is optional; set it to `demo` only for an explicitly fictional demo deployment. Local development without configuration still defaults to demo. Never use a local file database on Vercel or prefix database credentials with `NEXT_PUBLIC_`.
-
-Vercel serves Next.js pages and read APIs from processed Turso data. Do not configure `XKIRO_API_KEY`, `OPENAI_API_KEY`, `ENRICHMENT_PROVIDER`, `XKIRO_MODEL`, `OPENAI_MODEL`, `AI_BATCH_SIZE`, or `MAX_AI_ITEMS_PER_RUN` there. All AI/provider/source settings belong to the GitHub Actions ingestion worker. Web validation in `src/lib/server/env.ts` ignores worker settings entirely; `src/lib/server/ingestion-env.ts` validates them only when ingestion/enrichment is explicitly invoked. Production builds perform no collection, enrichment or database queries.
-
-Run the GitHub Actions ingestion workflow against the same database to apply migrations and publish the first snapshot. An initialized database with no observations shows **Waiting for a pulse**, with no fictional evidence or fabricated collection time. `/api/health` reports the application and database separately: an empty database reports database `ok` and HTTP 503 until a usable collection exists; connection failures return a controlled HTTP 503 with database `unavailable`, and the page displays the unavailable notice without exposing diagnostics or credentials.
-
-For an explicit SEO origin, set optional `SITE_URL=https://bengaluru-internet-pulse.vercel.app` in Vercel Production. It takes precedence over automatic `VERCEL_PROJECT_PRODUCTION_URL` and the project's production-domain fallback. `SITE_URL` must be a public HTTPS origin without credentials, a path, query or fragment; localhost/private development origins are rejected. Request headers and preview URLs never determine canonicals.
-
-Home, methodology and topic pages have titles, descriptions, canonical URLs, Open Graph and Twitter cards. Favicon and Apple touch icons are local assets. `/robots.txt` and meta robots prevent indexing demo/preview/development pages; live production allows public pages and blocks `/api/`. `/sitemap.xml` contains only the stable home/methodology pages, without database or ingestion calls. The share image is a local static PNG with no rendering service. Remote database requests have an eight-second deadline, and read caches are isolated by database identity. See [First-deployment audit](docs/production-audit.md).
-
-Turso schema versions are tracked by the checksummed `schema_migrations` ledger. Remote migrations omit `PRAGMA user_version` writes because Turso rejects them; local SQLite retains the file-header marker. Migration SQL files and their checksums are unchanged.
-
-Production ingestion runs through [GitHub Actions](.github/workflows/ingest.yml) at `17,47 * * * *` UTC and supports **Actions → Ingest public signals → Run workflow**. Add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as GitHub repository Actions secrets. Until both exist, scheduled runs clearly report **not configured** and skip ingestion before dependency installation; they never count as fresh collection. Normal manual runs with missing secrets and all actual database errors still fail visibly. Use the optional **check_configuration** dispatch to inspect database-secret presence without collection. The intended production provider is **xKiro**, selected through `ENRICHMENT_PROVIDER=xkiro`, with `XKIRO_API_KEY` as a Secret and `XKIRO_MODEL` as a vendor-prefixed model Variable. OpenAI is retained as an optional provider. Workflow concurrency and the database lease prevent overlap. Structured source counts, selected/actual enrichment providers, fallback counts, backlog and retention appear in logs and the run summary. There is no Vercel cron configuration or scheduling dependency. See [Scheduled ingestion](docs/scheduled-ingestion.md).
-
-`GET /api/ingest` remains available to authenticated operators with `Authorization: Bearer <CRON_SECRET>` (at least 32 characters). The GitHub workflow calls the CLI directly and does not need this secret or a deployed site URL. Public reads never trigger source calls or writes. The secret must not be placed in a URL or a `NEXT_PUBLIC_` variable.
-
-## Semantic enrichment
-
-Three server-only providers implement a common `EnrichmentProvider` interface and normalized Zod result contract. `getEnrichmentProvider()` reads `ENRICHMENT_PROVIDER` and rejects unknown values. Switching providers requires environment changes only:
-
-| Provider | Environment | Behavior |
-| --- | --- | --- |
-| `heuristic` | `ENRICHMENT_PROVIDER=heuristic` | Local default; genuine text/keyword/entity normalization, conservative topic similarity and factual summaries; no key or API bill |
-| `xkiro` | `ENRICHMENT_PROVIDER=xkiro`, `XKIRO_API_KEY`, `XKIRO_MODEL` | Intended production selection; OpenAI-compatible Chat Completions; model must retain its `vendor/model` prefix |
-| `openai` | `ENRICHMENT_PROVIDER=openai`, `OPENAI_API_KEY` | Optional official Responses API; `OPENAI_MODEL` defaults to `gpt-6-luna` and is configurable |
-
-`XKIRO_BASE_URL` defaults to `https://api.xkiro.com/v1`. Select an entitled xKiro model through configuration; none is hard-coded. Builds and read endpoints need neither provider's credentials. Only the selected provider validates its key, model and URL: missing OpenAI configuration has no effect on xKiro, and missing xKiro configuration has no effect on OpenAI. GitHub scheduled runs and default manual runs honor the `ENRICHMENT_PROVIDER` repository Variable; an explicit manual provider choice overrides it. Blank optional model/base URL Variables use application defaults. A missing or invalid selected-provider setting, 401/403/429, upstream failure, timeout or malformed output falls back **only to heuristic**, never to the other API provider. Actual processing provenance is persisted per item and per run; selecting xKiro does not claim xKiro succeeded when local fallback handled a batch.
-
-The repository commits collected signals before enrichment, supplies active topic IDs seen within 24 hours, batches up to `AI_BATCH_SIZE=10` and processes up to `MAX_AI_ITEMS_PER_RUN=30`. Limits are validated. Completed/irrelevant items are never re-enriched. A 15-second API-stage deadline, eight-second requests, bounded transient retries, queue cooldown and attempt caps prevent runaway work. `ENRICHMENT_ENABLED=false` stores pending items without classification. If heuristic validation also fails, data stays pending rather than being lost or scored.
-
-Source titles/excerpts are untrusted JSON data, separated from static instructions; no tools or code execution are available. Classification confidence remains separate from deterministic trend confidence. Migration 6 preserves historical mock/OpenAI provenance and adds actual-provider metadata and durable enrichment-run statistics. All model tests use mocks and consume no API credits. See [Semantic enrichment](docs/enrichment.md) for the architecture, environment variables, GitHub Secrets/Variables, fallback and observability contracts.
-
-## API
-
-| Route | Behavior |
-| --- | --- |
-| `GET /api/pulse` | `window=2h\|6h\|24h`, `category`, `source`; top/rising topics, source stream, snapshot and ingestion metadata |
-| `GET /api/topics` | Filter the full set using `window`, `q`, `category`, `source`, `lifecycle`, `limit` (1–100) |
-| `GET /api/topics/[slug]` | Retained topic detail, including inactive topics; versioned history, bounded evidence and related signals |
-| `GET /api/hotspots` | Window/category/source filters; neighborhood activity, average/top pulse and top topic |
-| `GET /api/health` | Application/database status, last ingestion, source statuses and 24-hour collection count |
-| `GET /api/ingest` | Protected ingestion; 401 without bearer auth; 409 if busy or in demo mode |
-
-Responses have `Cache-Control: no-store`. Unavailable live reads return 503 and expose `generatedAt: null` when there is no readable collection. Stale health returns 503; stale data reads expose available evidence with explicit freshness metadata. Counts are sampled distinct observations, not readership, unique people or citywide activity.
-
-The current scoring contract is `version: "v2"`; dashboard responses use `topTopics` and `risingTopics` instead of exposing internal raw trends. Lifecycle filters accept `NEW`, `EMERGING`, `RISING`, `HOT`, `STABLE` and `COOLING`. Topic metrics include `current2h`, `previous2h`, `count6h`, `count24h`, `sourceCount`, `growthRatio`, `latestSignalAgeHours`, `firstSeenAt`, separate `confidence` and bounded `growthPercent`/`changeCapped`. Selection windows leave scoring fixed at two hours. Historical database rows retain their original scoring version and score. A 15-second server cache reduces query work; health probes storage directly. Parameters and persisted models are validated, and public DTOs omit secrets and storage internals. See [Read API](docs/read-api.md) for complete contracts, privacy, limits and freshness behavior.
-
-## Architecture and stack
-
-[Architecture](docs/architecture.md) · [Data sources](docs/data-sources.md) · [Trend formula](docs/trend-algorithm.md) · [Engineering rules](AGENTS.md)
-
-Next.js App Router / strict TypeScript / Tailwind CSS / shadcn/ui Button and Badge primitives / Lucide / Recharts / React Leaflet / Zod / Turso-libSQL / Vitest / Playwright / GitHub Actions / Vercel. Local component sources and `components.json` support further shadcn/ui additions. No Reddit integration.
+- Public search is sampled. Outages, result caps, language coverage and delayed scheduled runs can leave sparse or stale evidence; the site exposes those gaps.
+- Heuristic grouping, categories and content-rule flags need human evaluation. Confidence describes sampled corroboration, not truth or importance.
+- Language badges estimate scripts; transliteration and shared scripts remain ambiguous. Locality aliases are mostly English spellings.
+- Only nine locality centers are verified. The other 131 stay off maps until reviewed. Map points describe mentions, not verified incidents or people.
+- RSS is implemented but off by default until the author reviews unchecked feed terms. GDELT remains an observed timeout/network limitation.
+- Next work: complete human labels, evaluate a current collected sample, write a case study from real history, review locality coordinates and feed rights, and measure sustained source coverage. No adoption or accuracy claim is made.

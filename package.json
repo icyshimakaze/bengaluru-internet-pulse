@@ -21,7 +21,8 @@
     "db:seed": "tsx --conditions=react-server scripts/seed.ts",
     "eval:sample": "tsx --conditions=react-server scripts/eval-sample.ts",
     "eval": "tsx --conditions=react-server scripts/eval.ts",
-    "backtest": "tsx --conditions=react-server scripts/backtest.ts"
+    "backtest": "tsx --conditions=react-server scripts/backtest.ts",
+    "screenshot": "tsx scripts/screenshot.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
@@ -57,5 +58,19 @@
     "typescript": "^5.9.0",
     "vitest": "^4.0.0",
     "yaml": "^2.9.1"
-  }
+  },
+  "description": "A Bengaluru public-signal momentum detector with inspectable evidence.",
+  "keywords": [
+    "bengaluru",
+    "nextjs",
+    "typescript",
+    "data-pipeline",
+    "trend-detection",
+    "portfolio"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/icyshimakaze/bengaluru-internet-pulse.git"
+  },
+  "license": "MIT"
 }
