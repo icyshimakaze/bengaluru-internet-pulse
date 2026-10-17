@@ -51,7 +51,7 @@ export function supportedLocation(evidence: readonly Pick<PublicSignal, "neighbo
 }
 export function observedMilestones(history: readonly HistorySnapshot[]) {
   // Versions have different score equations. Never combine them to invent a peak or stage.
-  const current = history.filter((s) => s.algorithmVersion === "v2").sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+  const current = history.filter((s) => s.algorithmVersion === "v3").sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
   return {
     emerging: current.find((s) => s.lifecycle === "EMERGING") ?? null,
     rising: current.find((s) => s.lifecycle === "RISING") ?? null,

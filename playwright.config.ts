@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 import { DEMO_BASE_URL, LIVE_BASE_URL } from "./tests/e2e/urls";
 
-const safeEnv = { ENRICHMENT_PROVIDER: "heuristic", OPENAI_API_KEY: "", XKIRO_API_KEY: "",
+const safeEnv = { ENRICHMENT_PROVIDER: "heuristic", OPENAI_API_KEY: "", XKIRO_API_KEY: "", CURRENTS_API_KEY: "", CURRENTS_ENABLED: "false",
   TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "", CRON_SECRET: "" };
 
 export default defineConfig({

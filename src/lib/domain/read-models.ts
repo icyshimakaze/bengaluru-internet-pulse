@@ -29,7 +29,7 @@ export const publicTopicSchema = trendSchema.omit({ method: true, currentCount: 
 export type PublicTopic = z.infer<typeof publicTopicSchema>;
 export const recentConversationSchema = z.object({ slug: slugSchema, title: z.string().min(3).max(100),
   category: semanticCategorySchema, neighborhood: neighborhoodSchema.nullable(), latestAt: z.iso.datetime(),
-  signalCount: z.number().int().positive(), sources: z.array(sourceSchema).min(1).max(3) }).strict();
+  signalCount: z.number().int().positive(), sources: z.array(sourceSchema).min(1).max(4) }).strict();
 export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).extend({ stale: z.boolean(),
   ingestionStatus: z.enum(["running", "completed", "partial", "failed", "abandoned"]).nullable(),
   healthState: sourceHealthStateSchema,
@@ -40,7 +40,7 @@ export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).exten
 export const publicRunSchema = z.object({ source: sourceSchema, startedAt: z.iso.datetime(), finishedAt: z.iso.datetime().nullable(),
   status: z.enum(["running", "completed", "partial", "failed", "abandoned"]), discovered: z.number().int().nonnegative(),
   inserted: z.number().int().nonnegative(), duplicates: z.number().int().nonnegative(), errors: z.number().int().nonnegative() }).strict();
-export const snapshotInfoSchema = z.object({ algorithmVersion: z.literal("v2"), storedVersion: z.enum(["v1", "v2"]).nullable(),
+export const snapshotInfoSchema = z.object({ algorithmVersion: z.literal("v3"), storedVersion: z.enum(["v1", "v2"]).nullable(),
   capturedAt: z.iso.datetime().nullable(), evaluatedAt: z.iso.datetime(), ageSeconds: z.number().nonnegative().nullable(),
   cacheAgeSeconds: z.number().nonnegative(), refreshDelayed: z.boolean(),
   scoringWindow: z.literal("2h"), queryWindow: readQuerySchema.shape.window, stale: z.boolean() }).strict();
@@ -62,14 +62,14 @@ export type DashboardData = z.infer<typeof dashboardSchema>;
 export const topicListSchema = z.object({ mode: pulseSchema.shape.mode, status: pulseSchema.shape.status, generatedAt: z.iso.datetime().nullable(),
   stale: z.boolean(), total: z.number().int().nonnegative(), topics: z.array(publicTopicSchema).max(100), snapshot: snapshotInfoSchema }).strict();
 const count = z.number().int().nonnegative(), factor = z.number().min(0).max(1);
-export const historySnapshotSchema = z.object({ capturedAt: z.iso.datetime(), algorithmVersion: z.enum(["v1", "v2"]),
-  count2h: count, previousCount2h: count, count6h: count, count24h: count, sourceCount: count.max(3),
+export const historySnapshotSchema = z.object({ capturedAt: z.iso.datetime(), algorithmVersion: z.enum(["v1", "v2", "v3"]),
+  count2h: count, previousCount2h: count, count6h: count, count24h: count, sourceCount: count.max(4),
   pulseScore: z.number().min(0).max(100), confidence: factor, lifecycle: z.union([trendLifecycleSchema, z.literal("inactive")]),
   velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor }).strict();
 export type HistorySnapshot = z.infer<typeof historySnapshotSchema>;
 export const locationEvidenceSchema = z.object({
   neighborhood: neighborhoodSchema.nullable(), status: z.enum(["supported", "mixed", "insufficient", "unknown"]),
-  mentionCount: count, locatedSignalCount: count, sourceCount: count.max(3),
+  mentionCount: count, locatedSignalCount: count, sourceCount: count.max(4),
 }).strict().refine((v) => (v.status === "supported") === (v.neighborhood !== null), "Only supported locations can name a neighborhood")
   .refine((v) => v.mentionCount <= v.locatedSignalCount && v.sourceCount <= v.mentionCount, "Location evidence counts must be consistent")
   .refine((v) => v.status !== "supported" || v.mentionCount >= 2 && v.sourceCount >= 2 && v.mentionCount / v.locatedSignalCount >= 0.6,

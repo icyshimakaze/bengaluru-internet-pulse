@@ -229,7 +229,7 @@ test("public query contracts keep bounded evidence, fixed scoring and proper err
   expect(food.topTopics).toHaveLength(1); expect(food.topTopics[0]).toMatchObject({ sourceCount: 3, semanticCategory: "food", neighborhood: "Indiranagar" });
   expect(food.sourceStream.every((s: { source: string }) => s.source === "gdelt")).toBe(true);
   const detail = await (await request.get("/api/topics/namma-metro")).json();
-  expect(detail.history.at(-1).algorithmVersion).toBe("v2"); expect(detail.sourceEvidence).toHaveLength(30);
+  expect(detail.history.at(-1).algorithmVersion).toBe("v3"); expect(detail.sourceEvidence).toHaveLength(30);
   expect(detail.relatedSignals.length).toBeGreaterThan(0); expect(detail.topic).not.toHaveProperty("method");
   expect((await request.get("/api/ingest")).status()).toBe(401);
   expect((await request.get("/api/topics/missing")).status()).toBe(404);

@@ -12,10 +12,11 @@ In GitHub **Settings → Secrets and variables → Actions**, configure reposito
 | --- | --- |
 | `TURSO_DATABASE_URL` | Required persistent remote `libsql://` or `https://` database URL; local `file:` storage is rejected |
 | `TURSO_AUTH_TOKEN` | Required database token with write access |
+| `CURRENTS_API_KEY` | Optional news input; adding the raw key automatically enables Currents, with no extra Variable or Vercel setting. See [setup](currents.md). |
 | `OPENAI_API_KEY` | Optional; used only with explicit `openai` enrichment |
 | `XKIRO_API_KEY` | Required for successful xKiro processing; missing keys use heuristic fallback |
 
-Database secrets are scoped to a dependency-free configuration check and the ingestion step. OpenAI/xKiro keys are passed only to ingestion and used only by the selected provider. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
+Database secrets are scoped to a dependency-free configuration check and the ingestion step. Currents/OpenAI/xKiro keys are passed only to ingestion. Currents activates from its key; OpenAI/xKiro keys are used only by the selected enrichment provider. Checkout, Node setup and `npm ci` receive none of them. Actions use immutable SHA pins; checkout does not persist GitHub credentials. The workflow requests only `contents: read`, prints no environment dump or command trace, and never interpolates secrets into commands, URLs, outputs or summaries.
 
 Before installing dependencies, `scripts/check-ingestion-config.mjs` checks database-secret presence and validates the nonsecret worker limits: `AI_BATCH_SIZE` must be 1–10 and `MAX_AI_ITEMS_PER_RUN` must be 1–30. An invalid limit fails visibly with its variable name and supported range, without printing values or collecting. An unconfigured **scheduled** run emits a warning, explains the missing secret names in its summary, and skips setup/collection. It never claims ingestion or freshness. This bootstrap does not validate database connectivity or provider account access; the actual worker still applies Zod validation before opening storage or collection.
 
@@ -37,7 +38,7 @@ To check setup safely before obtaining database credentials, select **check_conf
 ## Pipeline and durability
 
 1. Validate production configuration, migrate the database and acquire the shared database lease.
-2. Collect GDELT, Bluesky and Hacker News independently with source deadlines, bounded transient retries, Zod validation, normalization and URL/content deduplication.
+2. Collect GDELT, Bluesky, Hacker News and keyed Currents independently with source deadlines, bounded transient retries, Zod validation, normalization and URL/content deduplication.
 3. Persist newly collected signals as pending before attempting enrichment.
 4. Fetch the approximately 24-hour active-topic catalog; enrich with bounded batches, validate results, and assign existing or propose canonical topics.
 5. In one short database transaction, revalidate/apply topic assignments, deduplicate persisted evidence, calculate deterministic scores/confidence, persist dashboard/topic snapshots, update lifecycle and source counters, and prune expired data.

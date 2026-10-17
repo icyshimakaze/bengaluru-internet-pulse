@@ -42,16 +42,16 @@ export const topicUpdateSchema = topicFieldsSchema.partial().omit({ id: true, is
 export type TopicUpdate = z.infer<typeof topicUpdateSchema>;
 export const snapshotRecordSchema = z.object({
   topicId: id, capturedAt: timestamp, count2h: count, previousCount2h: count, count6h: count, count24h: count,
-  sourceCount: count.max(3), velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor,
+  sourceCount: count.max(4), velocityScore: factor, volumeScore: factor, diversityScore: factor, recencyScore: factor,
   confidence: factor, pulseScore: z.number().int().min(0).max(100), lifecycle: lifecycleSchema,
-  count3h: count, previousCount3h: count, scoringSourceCount: count.max(3), algorithmVersion: z.enum(["v1", "v2"]), batchId: id.nullable(),
+  count3h: count, previousCount3h: count, scoringSourceCount: count.max(3), algorithmVersion: z.enum(["v1", "v2", "v3"]), batchId: id.nullable(),
   growthRatio: z.number().positive().optional(), latestSignalAgeHours: z.number().nonnegative().nullable().optional(), firstSeenAt: timestamp.nullable().optional(),
   clusterConsistency: factor.optional(), evidenceConfidence: factor.optional(), diversityConfidence: factor.optional(), sourceBalance: factor.optional(),
   scoreCap: z.number().int().min(0).max(100).optional(), changePercent: z.number().int().min(-100).max(300).optional(), changeCapped: z.boolean().optional(),
 }).refine((v) => v.count2h <= v.count6h && v.count6h <= v.count24h, "Snapshot windows must be consistent")
-  .refine((v) => v.algorithmVersion !== "v2" || [v.growthRatio,v.latestSignalAgeHours,v.firstSeenAt,v.clusterConsistency,v.evidenceConfidence,v.diversityConfidence,v.sourceBalance,v.scoreCap,v.changePercent,v.changeCapped].every((field) => field !== undefined), "V2 snapshots require scoring telemetry")
-  .refine((v) => v.algorithmVersion !== "v2" || v.pulseScore <= (v.scoreCap ?? 0), "Score exceeds evidence cap")
-  .refine((v) => v.algorithmVersion !== "v2" || !v.firstSeenAt || v.firstSeenAt <= v.capturedAt, "First seen cannot follow capture time");
+  .refine((v) => v.algorithmVersion === "v1" || [v.growthRatio,v.latestSignalAgeHours,v.firstSeenAt,v.clusterConsistency,v.evidenceConfidence,v.diversityConfidence,v.sourceBalance,v.scoreCap,v.changePercent,v.changeCapped].every((field) => field !== undefined), "Modern snapshots require scoring telemetry")
+  .refine((v) => v.algorithmVersion === "v1" || v.pulseScore <= (v.scoreCap ?? 0), "Score exceeds evidence cap")
+  .refine((v) => v.algorithmVersion === "v1" || !v.firstSeenAt || v.firstSeenAt <= v.capturedAt, "First seen cannot follow capture time");
 export type SnapshotRecord = z.infer<typeof snapshotRecordSchema>;
 export const ingestionRunSchema = z.object({
   id, source: sourceSchema, startedAt: timestamp, finishedAt: timestamp.nullable(), discovered: count,

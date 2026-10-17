@@ -8,7 +8,7 @@ import { evaluateTopics, HOUR } from "@/lib/trends/engine";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 
 describe("versioned scoring persistence", () => {
-  it("preserves v4 evidence, checksums and historical scores while publishing v2 at the same capture time", async () => {
+  it("preserves v4 evidence, checksums and historical scores while publishing v3 at the same capture time", async () => {
     const repo = testRepository();
     await migrate(repo.client, loadMigrations().slice(0, 4), now);
     const evidence = [observation("version-a", 0.25), observation("version-b", 1, "gdelt")];
@@ -21,7 +21,7 @@ describe("versioned scoring persistence", () => {
     await repo.client.batch([topicInsert(record, { legacy: true }), ...items.map(itemInsert), snapshotInsert(original, { legacy: true })], "write");
     const ledger = (await repo.client.execute("SELECT * FROM schema_migrations ORDER BY version")).rows;
     const before = (await repo.client.execute("SELECT * FROM topic_snapshots")).rows[0]!;
-    expect(await repo.initialize()).toEqual({ applied: [5, 6, 7], version: 7 });
+    expect(await repo.initialize()).toEqual({ applied: [5, 6, 7, 8], version: 8 });
     expect((await repo.client.execute("SELECT * FROM schema_migrations WHERE version<=4 ORDER BY version")).rows).toEqual(ledger);
     const after = (await repo.client.execute("SELECT * FROM topic_snapshots")).rows[0]!;
     for (const key of Object.keys(before)) expect(after[key]).toEqual(before[key]);
@@ -31,7 +31,7 @@ describe("versioned scoring persistence", () => {
     const owner = (await repo.acquireLease(now))!;
     const published = await repo.publish([topic], [], pulse(), owner, now);
     const history = await repo.fetchTopicHistory(record.id);
-    expect(history.map((h) => h.algorithmVersion)).toEqual(["v1", "v2"]);
+    expect(history.map((h) => h.algorithmVersion)).toEqual(["v1", "v3"]);
     expect(history[0]).toMatchObject({ pulseScore: 83, velocityScore: 0.72, confidence: 0.81 });
     expect(history[1]).toMatchObject({ capturedAt: now.toISOString(), count2h: 2, previousCount2h: 0, count6h: 2,
       count24h: 2, sourceCount: 2, pulseScore: published.pulse.trends[0]!.score, growthRatio: 3, lifecycle: "EMERGING" });
@@ -53,7 +53,7 @@ describe("versioned scoring persistence", () => {
     const upgraded = await repo.latest();
     expect(upgraded).toMatchObject({ version: "v2", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), totalSignals: 2 });
     expect(upgraded?.trends[0]).toMatchObject({ current2h: 2, previous2h: 0, sourceCount: 2, score: metric.score });
-    expect(upgraded?.notice).toContain("v2");
+    expect(upgraded?.notice).toContain("v3");
     expect((await repo.client.execute("SELECT payload FROM pulse_snapshots")).rows[0]?.payload).toBe(text);
     expect((await repo.client.execute("SELECT * FROM topic_snapshots")).rows).toEqual([]);
   });

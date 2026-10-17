@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAdapters } from "@/lib/sources/adapters";
-import { normalizedSignalSchema, sources } from "@/lib/domain/schema";
+import { normalizedSignalSchema, coreSources as sources } from "@/lib/domain/schema";
 import { fetchJson, type Transport } from "@/lib/sources/http";
 import fixtures from "@/fixtures/public-sources.json";
 import { now } from "./helpers";

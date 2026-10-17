@@ -41,10 +41,12 @@ describe("production ingestion workflow", () => {
     expect(job.env).toBeUndefined();
     expect(ingest.run).toBe("npm run ingest -- --require-remote");
     expect(ingest["timeout-minutes"]).toBe(3);
-    for (const name of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "OPENAI_API_KEY", "XKIRO_API_KEY"]) expect(ingest.env?.[name]).toBe("${{ secrets." + name + " }}");
+    for (const name of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "OPENAI_API_KEY", "XKIRO_API_KEY", "CURRENTS_API_KEY"]) expect(ingest.env?.[name]).toBe("${{ secrets." + name + " }}");
+    expect(ingest.env?.CURRENTS_ENABLED).toBe("auto");
     const config = job.steps.find((s) => s.id === "configuration")!;
     for (const name of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]) expect(config.env?.[name]).toBe("${{ secrets." + name + " }}");
     expect(config.env).not.toHaveProperty("OPENAI_API_KEY"); expect(config.env).not.toHaveProperty("XKIRO_API_KEY");
+    expect(config.env).not.toHaveProperty("CURRENTS_API_KEY");
     expect(config.env?.AI_BATCH_SIZE).toBe("${{ vars.AI_BATCH_SIZE || '10' }}");
     expect(config.env?.MAX_AI_ITEMS_PER_RUN).toBe("${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}");
     for (const s of job.steps.filter((s) => !["configuration", "ingest"].includes(s.id ?? ""))) expect(JSON.stringify(s)).not.toContain("secrets.");

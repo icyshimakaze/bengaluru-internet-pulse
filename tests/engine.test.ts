@@ -12,7 +12,7 @@ function signals(c: number, p: number, slug = topic.slug, cross = true, currentA
 }
 const metric = (input: Observation[], descriptor: Topic = topic) => evaluateTopics([descriptor], input, now)[0]!;
 
-describe("production deterministic momentum v2", () => {
+describe("production deterministic momentum v3", () => {
   it("ranks a rapidly rising genuine small topic above a large stable topic", () => {
     const burst = { ...topic, slug: "burst" }, stable = { ...topic, slug: "stable" };
     const trends = computeTrends([stable, burst], [...signals(100, 100, stable.slug), ...signals(8, 1, burst.slug)], now);

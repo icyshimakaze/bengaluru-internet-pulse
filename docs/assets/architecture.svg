@@ -26,14 +26,14 @@
   <text class="eyebrow" x="80" y="51">BENGALURU PULSE</text>
   <text class="heading" x="80" y="97">Public evidence. Deterministic momentum.</text>
   <text class="section" x="80" y="147">PUBLIC INTERNET</text>
-  <text class="note" x="1200" y="147" text-anchor="end">Three independent evidence sources</text>
+  <text class="note" x="1200" y="147" text-anchor="end">Four providers, three evidence channels</text>
 
   <!-- Public sources retain their original links and timestamps. -->
   <g>
     <rect class="card" x="80" y="164" width="340" height="84" rx="12"/>
     <rect x="100" y="184" width="4" height="43" rx="2" fill="#b9652b"/>
-    <text class="label" x="120" y="199">GDELT</text>
-    <text class="body" x="120" y="226">DOC 2.0 · article discovery</text>
+    <text class="label" x="120" y="199">GDELT + Currents</text>
+    <text class="body" x="120" y="226">News discovery · Currents optional</text>
   </g>
   <g>
     <rect class="card" x="470" y="164" width="340" height="84" rx="12"/>
@@ -45,7 +45,7 @@
     <rect class="card" x="860" y="164" width="340" height="84" rx="12"/>
     <rect x="880" y="184" width="4" height="43" rx="2" fill="#b9652b"/>
     <text class="label" x="900" y="199">Hacker News</text>
-    <text class="body" x="900" y="226">Algolia · stories</text>
+    <text class="body" x="900" y="226">Algolia · stories and comments</text>
   </g>
 
   <!-- Ingestion runs outside the web application's public read path. -->

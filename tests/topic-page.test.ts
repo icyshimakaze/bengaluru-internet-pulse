@@ -90,7 +90,7 @@ describe("topic brief rendering boundaries", () => {
     expect(html).toContain("1 SNAPSHOTS");
     expect(html).toContain("V1");
     expect(html).toContain("One recorded snapshot");
-    expect(html).toContain("Archived v1 scores use the earlier equation");
+    expect(html).toContain("Archived v1 scores retain their original equation");
     expect(html).toContain("earlier milestones may be absent");
   });
 });

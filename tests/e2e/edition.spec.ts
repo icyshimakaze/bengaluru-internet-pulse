@@ -1,6 +1,30 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test("keyed Currents renders as a fourth news provider with attribution and accessible mobile controls", async ({ page, request }) => {
+  const stored = await (await request.get("/api/pulse")).json();
+  const checkedAt = new Date().toISOString();
+  const sources = stored.sources.map((source: object) => ({ ...source, status: "ok", healthState: "live", stale: false, checkedAt, lastSuccessAt: checkedAt }));
+  const currents = { ...sources[0], source: "currents" };
+  const signal = { ...stored.sourceStream[0], source: "currents", sourceType: "news", title: "Currents integration test: Bengaluru metro report" };
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: { ...stored, mode: "live", status: "healthy", stale: false,
+    generatedAt: checkedAt, notice: null, sources: [...sources, currents], availableSources: ["gdelt", "bluesky", "hackernews", "currents"],
+    sourceStream: [signal], signalCount: 1, filters: { ...stored.filters, source: new URL(route.request().url()).searchParams.get("source") } } }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.locator(".hero-coverage")).toContainText("4 of 4 sources available");
+  await expect(page.getByLabel("Filter by source").getByRole("option", { name: "Currents", exact: true })).toHaveCount(1);
+  await page.getByRole("group", { name: "Source stream type" }).getByRole("button", { name: "News", exact: true }).click();
+  await expect(page.locator(".stream-list")).toContainText(signal.title);
+  await expect(page.locator(".stream-list").getByRole("link", { name: "Powered by Currents News API", exact: false })).toHaveAttribute("href", "https://currentsapi.services/");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const audit = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+    expect(audit.violations).toEqual([]);
+  }
+});
+
 test("recent conversations expose early evidence separately from momentum and follow search", async ({ page, request }) => {
   const stored = await (await request.get("/api/pulse")).json();
   const early = stored.topTopics[1];

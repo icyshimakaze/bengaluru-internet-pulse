@@ -4,7 +4,7 @@ import { locationEvidenceSchema, type HistorySnapshot, type PublicSignal } from 
 import { demoReadState, projectTopic } from "@/lib/server/projections";
 import { FIXTURE_NOW } from "@/fixtures/demo";
 const signal = (neighborhood: PublicSignal["neighborhood"], source: PublicSignal["source"] = "gdelt") => ({ neighborhood, source });
-const snapshot = (score: number, lifecycle: HistorySnapshot["lifecycle"], hour: number, version: "v1" | "v2" = "v2"): HistorySnapshot => ({
+const snapshot = (score: number, lifecycle: HistorySnapshot["lifecycle"], hour: number, version: "v1" | "v2" | "v3" = "v3"): HistorySnapshot => ({
   capturedAt: new Date(FIXTURE_NOW.getTime() - hour * 3_600_000).toISOString(), algorithmVersion: version,
   pulseScore: score, lifecycle, count2h: 5, previousCount2h: 2, count6h: 7, count24h: 9, sourceCount: 2,
   confidence: 0.7, velocityScore: 0.5, volumeScore: 0.5, diversityScore: 2 / 3, recencyScore: 0.9,

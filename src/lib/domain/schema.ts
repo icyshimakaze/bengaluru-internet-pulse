@@ -4,7 +4,7 @@ import { httpUrlSchema } from "./urls";
 import { sources, sourceTypes, sourceTypeFor } from "./source-labels";
 import { neighborhoods } from "./places";
 export { neighborhoods, coordinates } from "./places";
-export { sources, sourceTypes, sourceTypeFor, sourceNames } from "./source-labels";
+export { sources, sourceTypes, sourceTypeFor, sourceNames, coreSources } from "./source-labels";
 export { httpUrlSchema } from "./urls";
 
 export const sourceSchema = z.enum(sources);
@@ -69,7 +69,7 @@ export const legacyTrendSchema = topicSchema.extend({
 });
 export const trendSchema = legacyTrendSchema.omit({ lifecycle: true }).extend({
   lifecycle: trendLifecycleSchema, current2h: z.number().int().nonnegative(), previous2h: z.number().int().nonnegative(),
-  count6h: z.number().int().nonnegative(), count24h: z.number().int().nonnegative(), sourceCount: z.number().int().min(0).max(3),
+  count6h: z.number().int().nonnegative(), count24h: z.number().int().nonnegative(), sourceCount: z.number().int().min(0).max(sources.length),
   growthRatio: z.number().positive(), growthPercent: z.number().min(-100).max(300), changeCapped: z.boolean(),
   latestAt: z.iso.datetime().nullable(), latestSignalAgeHours: z.number().nonnegative().nullable(), firstSeenAt: z.iso.datetime().nullable(),
   clusterConsistency: z.number().min(0).max(1), evidenceConfidence: z.number().min(0).max(1),

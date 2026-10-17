@@ -1,6 +1,6 @@
 # Data sources
 
-Only public APIs are used. Reddit is deliberately excluded.
+Public APIs supply evidence. Currents is optional and requires a private worker key; the original sources and local demo remain keyless. Reddit is deliberately excluded. See [Currents setup](currents.md): production needs only the `CURRENTS_API_KEY` Actions secret.
 
 All source metadata is untrusted. The shared URL schema applies to collection, persisted records and public responses: HTTP(S) only, maximum 2,048 characters, no credentials/control characters/backslashes, no IP literals or local hostnames. Article links are not fetched by the application. Source HTTP requests reject redirects and retain bounded response streams/deadlines; provider endpoints are fixed in the adapters. This is lexical link validation, not DNS or destination-content certification.
 
@@ -9,6 +9,7 @@ Near-copy detection uses a sorted-title prefix index partitioned by publication 
 | Source | Public endpoint | Signal | Limitations |
 | --- | --- | --- | --- |
 | GDELT DOC 2.0 | `https://api.gdeltproject.org/api/v2/doc/doc` | Bengaluru-related article discovery | Indexing time differs from publication time; syndication and English coverage bias; discovery counts are not readership. |
+| Currents (optional) | `https://api.currentsapi.services/v2/search` | Bengaluru/Bangalore article metadata with publication time | Requires key and appropriate downstream usage rights; one English 24h query, at most 20 results; shares the news scoring channel with GDELT. |
 | Bluesky public AppView | `https://api.bsky.app/xrpc/app.bsky.feed.searchPosts` | Public posts mentioning Bengaluru/Bangalore | Search is sampled and service availability varies; no claim of full firehose coverage or precise user location. |
 | Hacker News Algolia | `https://hn.algolia.com/api/v1/search_by_date` | Bengaluru-related stories and public comments | Small technical audience; indexed stories are not representative of the city. |
 
@@ -19,6 +20,7 @@ Adapters request a bounded recent window, validate each record, reject invalid/f
 Every adapter returns `NormalizedSignal`: `source`, `sourceId`, original-source `url`, `title`, `excerpt`, `publishedAt`, `domain` and `sourceType` (`news`, `social`, `tech`). Internal signals add canonical linked-content URL, stable ID, content fingerprint, collection timestamp and publication/discovery provenance. Domain describes the canonical linked content when present. Source type is derived from the provider and does not require profile data.
 
 - GDELT: one broad `(Bengaluru OR Bangalore)` search using the documented 250-result cap. The former four category requests were subsets of this query; consolidating them reduces duplicate work and provider load. Requests use `artlist`, JSON, newest-first order and explicit UTC start/end bounds over 24 hours. The HTTP transport still spaces request starts, including retries, by at least 5.5 seconds.
+- Currents: automatically enabled by a nonblank `CURRENTS_API_KEY` in ingestion. One `Bengaluru OR Bangalore` v2 search, English, 20 results and an explicit 24h RFC 3339 window. The key is an authorization header scoped to Currents, never a URL parameter. Valid empty results are healthy; credentials and outages fail independently. Article publication offsets are validated and retained, and missing descriptions use the actual headline. No profiles, images or full bodies are collected.
 - Bluesky: Bengaluru and Bangalore with up to 100 results each; Namma Metro, ????????, Whitefield, Koramangala, Indiranagar, HSR Layout, Bellandur and Electronic City with up to 50 each. All ten searches use the direct public AppView, newest-first and bounded `since`/`until`. Only public post text, creation time and AT post identity are retained. Profiles, avatars, follower/engagement counts and handles are discarded. External links supply dedupe identity; evidence URLs remain original post permalinks. Neighborhood-only matches still pass city-relevance checks; explicit conflicting cities remain excluded by enrichment.
 - HN: Bengaluru and Bangalore, `search_by_date`, `(story,comment)` tags, numeric creation-time bounds and 50 hits per query. Stories retain ID, title, optional text, creation time and optional linked URL. Comments require the explicit `comment` tag, a story title, comment text and a valid comment creation time. They link to their own original HN item and retain their own timestamp, rather than inheriting the parent story's age or linked-article identity. Authors, profiles, points and comment counts are discarded.
 
@@ -40,7 +42,7 @@ Deduplicate by source identity, canonical URL and a versioned SHA-256 content fi
 
 ## Enrichment services are not evidence sources
 
-`ENRICHMENT_PROVIDER` selects `openai`, `xkiro` or `heuristic` after collection. OpenAI remains optional through the official Responses API. The intended deployment selects xKiro's OpenAI-compatible Chat Completions API, with `XKIRO_API_KEY`, `XKIRO_BASE_URL` (default `https://api.xkiro.com/v1`) and a configured vendor-prefixed `XKIRO_MODEL`. The local default is a keyless deterministic heuristic. These services normalize supplied metadata and do not contribute a fourth source or decide ranking.
+`ENRICHMENT_PROVIDER` selects `openai`, `xkiro` or `heuristic` after collection. OpenAI remains optional through the official Responses API. The intended deployment selects xKiro's OpenAI-compatible Chat Completions API, with `XKIRO_API_KEY`, `XKIRO_BASE_URL` (default `https://api.xkiro.com/v1`) and a configured vendor-prefixed `XKIRO_MODEL`. The local default is a keyless deterministic heuristic. These services normalize supplied metadata and do not contribute evidence sources or decide ranking.
 
 An unavailable API provider falls back only to heuristic. Source text and catalog labels remain untrusted input; every result passes strict Zod/context validation. Secrets stay in ingestion/server code. Per-item and per-run actual-provider provenance distinguishes xKiro success from heuristic fallback; no OpenAI usage is claimed merely because it is supported. No provider or fallback may invent evidence or discard collected data.
 

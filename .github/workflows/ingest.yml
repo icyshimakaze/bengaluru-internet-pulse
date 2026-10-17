@@ -62,6 +62,9 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
+          CURRENTS_API_KEY: ${{ secrets.CURRENTS_API_KEY }}
+          # The key alone activates Currents; no repository variable is required.
+          CURRENTS_ENABLED: auto
           APP_DATA_MODE: live
           ENRICHMENT_PROVIDER: ${{ inputs.enrichment_provider != 'repository' && inputs.enrichment_provider || vars.ENRICHMENT_PROVIDER || 'xkiro' }}
           ENRICHMENT_ENABLED: ${{ vars.ENRICHMENT_ENABLED || 'true' }}

@@ -20,7 +20,7 @@ const record = (changes: Partial<CollectionRecord> = {}) => collectionRecordSche
   lastErrorAt: null, lastErrorType: null, itemsLastRun: 0, ...changes });
 const emptyAdapters = (): Record<Source, SourceAdapter> => {
   const adapter = (source: Source): SourceAdapter => async () => ({ signals: [], health: { ...health(), source } });
-  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews") };
+  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews"), currents: adapter("currents") };
 };
 
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });

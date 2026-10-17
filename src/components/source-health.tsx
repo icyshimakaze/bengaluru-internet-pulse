@@ -24,7 +24,7 @@ export function SourceHealth({ health }: { health: HealthData }) {
   return <section id="source-health" className="about-source-health" aria-labelledby="source-health-heading">
     <h2 id="source-health-heading">Source health</h2>
     <div className="about-health-body">
-      <dl className="about-health-sources">{sources.map((source) => {
+      <dl className="about-health-sources">{sources.filter((source) => source !== "currents" || !demo && health.sources.some((row) => row.source === source)).map((source) => {
         const state = sourceState(health, source);
         return <div key={source}><dt>{sourceNames[source]}</dt><dd className={`about-source-state source-state-${state.tone}`}>
           <span aria-hidden="true" className="signal-dot" />{state.label}

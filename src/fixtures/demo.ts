@@ -1,4 +1,4 @@
-import { type Observation, type Pulse, type Topic, sources } from "@/lib/domain/schema";
+import { type Observation, type Pulse, type Topic, coreSources as sources } from "@/lib/domain/schema";
 import { normalize } from "@/lib/pipeline/normalize";
 import { topicRules } from "@/lib/pipeline/topics";
 import { computeTrends, computeHotspots, HOUR } from "@/lib/trends/engine";

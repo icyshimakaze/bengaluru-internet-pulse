@@ -4,7 +4,7 @@ import { z } from "zod";
 import { errorCode, log } from "@/lib/server/logger";
 import { httpUrlSchema, sourceSchema, type Source } from "@/lib/domain/schema";
 
-export type TransportOptions = { timeoutMs?: number; signal?: AbortSignal; source?: Source; queryId?: string; minIntervalMs?: number };
+export type TransportOptions = { timeoutMs?: number; signal?: AbortSignal; source?: Source; queryId?: string; minIntervalMs?: number; init?: RequestInit };
 type Options = TransportOptions & { attempts?: number; fetcher?: typeof fetch; init?: RequestInit };
 export type Transport = (url: string, options?: TransportOptions) => Promise<unknown>;
 export const RESPONSE_LIMIT_BYTES = 2 * 1024 * 1024;

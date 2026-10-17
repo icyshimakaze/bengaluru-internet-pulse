@@ -8,5 +8,5 @@ export function upgradeLegacyPulse(input: unknown, topics: Topic[] = [], observa
   for (const topic of topics) catalog.set(topic.slug, topic);
   const trends = computeTrends([...catalog.values()], [...old.trends.flatMap((t) => t.evidence), ...observations], at);
   return pulseSchema.parse({ ...old, version: "v2", trends, hotspots: computeHotspots(trends, at),
-    notice: [old.notice, "Scoring updated to v2 using retained evidence; the collection timestamp is unchanged."].filter(Boolean).join(" ") });
+    notice: [old.notice, "Scoring updated to v3 using retained evidence; the collection timestamp is unchanged."].filter(Boolean).join(" ") });
 }

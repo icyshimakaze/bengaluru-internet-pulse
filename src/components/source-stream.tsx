@@ -2,6 +2,7 @@
 import { memo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { SourceAttribution } from "./source-attribution";
 import { sourceNames } from "@/lib/domain/source-labels";
 import type { DashboardData } from "@/lib/domain/read-models";
 import { formatDate, formatTime } from "@/lib/format";
@@ -21,7 +22,7 @@ export const SourceStream = memo(function SourceStream({ pulse }: { pulse: Dashb
     <ol className="stream-list">{stream.map((signal) => <li key={signal.id}>
       <div className="stream-time"><time dateTime={signal.publishedAt} title={`${formatDate(signal.publishedAt)} · ${formatTime(signal.publishedAt)} IST · ${signal.timeKind}`}>{pulse.mode === "demo" ? formatTime(signal.publishedAt) : elapsedLabel(signal.publishedAt, now)}</time><span className="stream-time-kind">{signal.timeKind === "discovered" ? "Discovered" : "Published"}</span></div>
       <div className="stream-provenance"><span className={`stream-source-name provider-${signal.source}`}>{sourceNames[signal.source]}</span><span className="stream-type mono">{pulse.mode === "demo" ? "EXAMPLE" : signal.sourceType.toUpperCase()}</span></div>
-      <div className="stream-evidence">{pulse.mode === "demo" ? <span className="demo-evidence-title">{signal.title}</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">{signal.title}<ArrowUpRight size={15} aria-hidden="true" /><span className="sr-only"> · original source (opens in a new tab)</span></a>}<p>{signal.domain}{signal.enrichmentStatus !== "completed" ? " · Awaiting topic matching" : ""}</p></div>
+      <div className="stream-evidence">{pulse.mode === "demo" ? <span className="demo-evidence-title">{signal.title}</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">{signal.title}<ArrowUpRight size={15} aria-hidden="true" /><span className="sr-only"> · original source (opens in a new tab)</span></a>}<p>{signal.domain}{signal.enrichmentStatus !== "completed" ? " · Awaiting topic matching" : ""}</p>{pulse.mode === "live" && <SourceAttribution source={signal.source} />}</div>
       <div className="stream-location"><span>{signal.neighborhood ?? "Citywide / Unknown"}</span>{signal.topicSlug && <Link className="stream-topic-link" href={`/topic/${signal.topicSlug}`}>Topic brief ↗</Link>}</div>
     </li>)}</ol>
     {!stream.length && <div className="stream-empty"><p>No collected evidence in this selection.</p><span>{pulse.stale || pulse.status === "unavailable" || !pulse.availableSources.length ? "Source coverage is delayed or unavailable. See system status for the last successful collection." : "Try a wider window or another source type."}</span></div>}

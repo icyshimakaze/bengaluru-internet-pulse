@@ -44,7 +44,7 @@ test("missing topics are not indexed and inherit no canonical URL", async ({ pag
   await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
 });
 
-test("production browser bundles contain no database or AI credential names or endpoints", () => {
+test("production browser bundles contain no database, news or AI credential names or endpoints", () => {
   let count = 0;
   function scan(directory: string) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -52,7 +52,7 @@ test("production browser bundles contain no database or AI credential names or e
       if (entry.isDirectory()) scan(path);
       else if (entry.name.endsWith(".js")) {
         const content = readFileSync(path, "utf8");
-        expect(content, entry.name).not.toMatch(/TURSO_AUTH_TOKEN|TURSO_DATABASE_URL|XKIRO_API_KEY|OPENAI_API_KEY|api\.openai\.com|api\.xkiro\.com/);
+        expect(content, entry.name).not.toMatch(/TURSO_AUTH_TOKEN|TURSO_DATABASE_URL|XKIRO_API_KEY|OPENAI_API_KEY|CURRENTS_API_KEY|CURRENTS_BUILD_ONLY_SENTINEL|api\.openai\.com|api\.xkiro\.com|api\.currentsapi\.services/);
         count++;
       }
     }

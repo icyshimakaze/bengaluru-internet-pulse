@@ -13,7 +13,7 @@ test("topic brief grounds its narrative in evidence and exposes snapshot history
   await expect(page.locator(".why-explanation")).toContainText("from " + data.topic.previous2h + " to " + data.topic.current2h);
   await expect(page.locator(".why-source-basis")).toContainText("GDELT · Bluesky · Hacker News");
   await expect(page.locator(".topic-where")).toContainText(data.locationEvidence.mentionCount + " explicit mentions");
-  await expect(page.locator(".snapshot-count")).toContainText("49 SNAPSHOTS · V2");
+  await expect(page.locator(".snapshot-count")).toContainText("49 SNAPSHOTS · V3");
   await expect(page.locator(".lifecycle-timeline > li")).toHaveCount(4);
   await expect(page.locator(".lifecycle-timeline")).toContainText("Peak " + Math.max(...data.history.map((s: { pulseScore: number }) => s.pulseScore)));
   await page.screenshot({ path: ".cache/topic-editorial-desktop.png", fullPage: true });

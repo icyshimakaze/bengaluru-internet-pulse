@@ -85,7 +85,7 @@ export class Repository extends DataRepository {
       const inserted = inserts.length ? (await tx.batch(inserts)).reduce((n, r) => n + r.rows.length, 0) : 0;
       await applyEnrichments(tx, options.enrichments ?? [], [...bySlug.values()], isFixture, captured);
       const rows = await tx.batch([
-        { sql: `SELECT t.*,(SELECT s.count_24h FROM topic_snapshots s WHERE s.topic_id=t.id AND s.algorithm_version='v2'
+        { sql: `SELECT t.*,(SELECT s.count_24h FROM topic_snapshots s WHERE s.topic_id=t.id AND s.algorithm_version IN ('v2','v3')
           ORDER BY s.captured_at DESC LIMIT 1) AS last_count_24h FROM topics t WHERE t.is_fixture=? ORDER BY t.slug`, args: [Number(isFixture)] },
         { sql: "SELECT * FROM items WHERE is_fixture=? AND published_at>=? AND published_at<=? ORDER BY published_at,id",
           args: [Number(isFixture), new Date(captured.getTime() - ITEM_RETENTION_DAYS * DAY).toISOString(), capturedAt] },

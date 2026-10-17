@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { DashboardData } from "@/lib/domain/read-models";
+import { SourceAttribution } from "./source-attribution";
 import { sourceNames } from "@/lib/domain/source-labels";
 import { categoryLabels, elapsedLabel } from "@/lib/trends/dashboard-presentation";
 import { usePulseStatus } from "./pulse-context";
@@ -21,6 +22,7 @@ export function RecentConversations({ conversations, query, demo }: {
       <div className="topic-kicker"><span>{categoryLabels[topic.category]}</span><time dateTime={topic.latestAt}>{elapsedLabel(topic.latestAt, now)}</time></div>
       <h3><Link href={`/topic/${topic.slug}`}>{topic.title}<ArrowUpRight size={15} aria-hidden="true" /></Link></h3>
       <p>{topic.signalCount} {topic.signalCount === 1 ? "signal" : "signals"} / 24H · {topic.sources.map((source) => sourceNames[source]).join(" + ")}</p>
+      {!demo && topic.sources.includes("currents") && <SourceAttribution source="currents" />}
       {topic.neighborhood && <span className="recent-conversation-place">{topic.neighborhood}</span>}
     </li>)}</ol>
   </section>;

@@ -1,9 +1,9 @@
-import { type Observation, type Topic, type Trend, type Hotspot, coordinates, sources } from "@/lib/domain/schema";
+import { type Observation, type Topic, type Trend, type Hotspot, coordinates, sources, sourceTypes, sourceTypeFor } from "@/lib/domain/schema";
 import { contentFingerprint, canonicalUrl } from "@/lib/pipeline/normalize";
 import { sameSyndicatedContent, syndicationSignature, SyndicationIndex } from "@/lib/pipeline/syndication";
 
 export const HOUR = 3600000;
-export const ALGORITHM_VERSION = "v2" as const;
+export const ALGORITHM_VERSION = "v3" as const;
 export const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 
@@ -63,7 +63,10 @@ function evaluate(topic: Topic, all: readonly Observation[], now: Date): Trend {
   const window = (hours: number) => recent.filter((o) => Date.parse(o.publishedAt) > end - hours * HOUR);
   const current = window(2), previous = recent.filter((o) => Date.parse(o.publishedAt) > end - 4 * HOUR && Date.parse(o.publishedAt) <= end - 2 * HOUR);
   const c = current.length, p = previous.length, count6h = window(6).length;
-  const activeSources = sources.filter((s) => current.some((o) => o.source === s)), s = activeSources.length;
+  const activeSources = sources.filter((s) => current.some((o) => o.source === s));
+  // Two news indexes are one channel, even when they discover different articles.
+  // This fixed denominator preserves v2 scores for the original three providers.
+  const channels = sourceTypes.filter((type) => activeSources.some((source) => sourceTypeFor[source] === type)), s = channels.length;
   const latestAt = recent[0]?.publishedAt ?? null;
   const age = latestAt ? (end - Date.parse(latestAt)) / HOUR : null;
   const firstTimes = [...all.map((o) => Date.parse(o.publishedAt)), ...(topic.firstSeenAt ? [Date.parse(topic.firstSeenAt)] : [])].filter((t) => Number.isFinite(t) && t <= end);
@@ -72,10 +75,10 @@ function evaluate(topic: Topic, all: readonly Observation[], now: Date): Trend {
   const growthRatio = (c + 1) / (p + 1);
   const supportedVelocity = clamp(Math.log2(growthRatio) / Math.log2(4)) * c / (c + 3);
   const velocity = p === 0 ? Math.min(0.65, supportedVelocity) : supportedVelocity;
-  const volume = clamp(Math.log1p(c) / Math.log(21)), diversity = s / sources.length;
+  const volume = clamp(Math.log1p(c) / Math.log(21)), diversity = s / sourceTypes.length;
   const recency = age === null ? 0 : Math.exp(-age / 2);
   const consistency = clusterConsistency(current), evidenceConfidence = 1 - Math.exp(-c / 6);
-  const largestShare = c ? Math.max(...activeSources.map((source) => current.filter((o) => o.source === source).length / c)) : 0;
+  const largestShare = c ? Math.max(...channels.map((type) => current.filter((o) => sourceTypeFor[o.source] === type).length / c)) : 0;
   const sourceBalance = s ? clamp(1 - largestShare + 1 / s) : 0;
   let confidence = clamp((0.55 * evidenceConfidence + 0.30 * diversity + 0.15 * consistency) * sourceBalance * (0.5 + 0.5 * consistency));
   if (s === 1) confidence = Math.min(0.45, confidence);
@@ -98,12 +101,12 @@ function evaluate(topic: Topic, all: readonly Observation[], now: Date): Trend {
       const t = Date.parse(o.publishedAt); return (i === 0 ? t >= start : t > start) && t <= start + HOUR;
     }).length };
   });
-  return { ...topic, current2h: c, previous2h: p, count6h, count24h: recent.length, sourceCount: s,
+  return { ...topic, current2h: c, previous2h: p, count6h, count24h: recent.length, sourceCount: activeSources.length,
     currentCount: c, baselineCount: p, totalCount: recent.length, growthRatio, growthPercent, changeCapped: uncappedChange > 300,
     velocity, volume, diversity, recency, score, scoreCap, confidence, clusterConsistency: consistency, evidenceConfidence,
     diversityConfidence: diversity, sourceBalance, confidenceLabel: confidence >= 0.7 ? "high" : confidence >= 0.35 ? "medium" : "low",
     lifecycle, latestAt, latestSignalAgeHours: age, firstSeenAt, history, evidence: recent, sources: activeSources,
-    explanation: `${c} distinct signals in the last 2 hours, compared with ${p} in the previous 2 hours, across ${s} public ${s === 1 ? "source" : "sources"}.${scoreCap < 100 ? ` Evidence safeguards cap the score at ${scoreCap}.` : ""}` };
+    explanation: `${c} distinct signals in the last 2 hours, compared with ${p} in the previous 2 hours, across ${activeSources.length} public ${activeSources.length === 1 ? "source" : "sources"} and ${s} evidence ${s === 1 ? "channel" : "channels"}.${scoreCap < 100 ? ` Evidence safeguards cap the score at ${scoreCap}.` : ""}` };
 }
 
 export function evaluateTopics(topics: readonly Topic[], observations: readonly Observation[], now: Date): Trend[] {

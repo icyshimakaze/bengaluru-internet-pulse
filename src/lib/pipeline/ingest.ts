@@ -7,7 +7,7 @@ import { fromSignal, toSignal } from "@/lib/db/mapping";
 import { type IngestionRun } from "@/lib/db/records";
 import { validateEnrichment, enrichmentTopicSchema, editorialCategory, type EnrichmentTopic } from "@/lib/domain/enrichment";
 import { enrichmentProviderSchema, validProviderModel, emptyEnrichmentRun, enrichmentRunSchema, actualProvider, type EnrichmentProviderName } from "@/lib/domain/enrichment-providers";
-import { getIngestionEnv } from "@/lib/server/ingestion-env";
+import { getIngestionEnv, currentsEnabled } from "@/lib/server/ingestion-env";
 import { log } from "@/lib/server/logger";
 import { deduplicate } from "./normalize";
 import { classifyAI, type Classification } from "./ai";
@@ -27,6 +27,7 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
   const env = getIngestionEnv();
   const now = options.now ?? new Date();
   const isFixture = options.mode === "demo";
+  const configuredSources = sources.filter((source) => source !== "currents" || !isFixture && currentsEnabled(env));
   const repository = options.repository ?? new Repository(getDatabase());
   log("info", "ingest.started", { mode: isFixture ? "demo" : "live" });
   const migrations = await repository.initialize();
@@ -37,13 +38,13 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
   let health: SourceStatus[] = [];
   try {
     await repository.recoverInterruptedRuns(now);
-    for (const source of sources) runs.push(await repository.startIngestionRun(source, now, isFixture));
+    for (const source of configuredSources) runs.push(await repository.startIngestionRun(source, now, isFixture));
     const existing = await repository.load(now, isFixture);
-    const adapters = options.adapters ?? createAdapters();
+    const adapters = options.adapters ?? createAdapters(undefined, { currentsKey: env.CURRENTS_API_KEY });
     const timeout = options.timeoutMs ?? env.SOURCE_TIMEOUT_MS;
-    const results = await Promise.allSettled(sources.map((source) => adapters[source](now, timeout)));
+    const results = await Promise.allSettled(configuredSources.map((source) => adapters[source](now, timeout)));
     health = results.map((r, i) => r.status === "fulfilled" ? r.value.health : {
-      source: sources[i]!, status: "error", fetched: 0, accepted: 0, rejected: 0, durationMs: 0, checkedAt: now.toISOString(), error: "SOURCE_UNAVAILABLE",
+      source: configuredSources[i]!, status: "error", fetched: 0, accepted: 0, rejected: 0, durationMs: 0, checkedAt: now.toISOString(), error: "SOURCE_UNAVAILABLE",
     });
     if (isFixture) health = health.map((s) => ({ ...s, status: s.status === "ok" ? "demo" : s.status }));
     for (const [index, status] of health.entries()) {
@@ -143,10 +144,10 @@ export async function ingest(options: Options = {}): Promise<IngestionResult> {
       unprocessed: candidates.length - assignments.length });
     const template: Pulse = {
       version: "v2", mode: isFixture ? "demo" : "live", generatedAt: now.toISOString(), evaluatedAt: now.toISOString(), stale: false,
-      status: isFixture ? "demo" : complete === 3 ? "healthy" : available > 0 ? "degraded" : "unavailable",
+      status: isFixture ? "demo" : complete === configuredSources.length ? "healthy" : available > 0 ? "degraded" : "unavailable",
       trends: [], hotspots: [], sources: health, totalSignals: 0,
       enrichment: { provider: actualProvider(enrichmentRun), run: enrichmentRun, pending: 0, completed: 0, irrelevant: 0 },
-      notice: isFixture ? "Fictional public-source fixtures. No live internet signals were collected." : complete === 3 ? null : available > 0 ? "Some source queries could not be completed. Momentum is based on the available evidence." : "All sources are currently unavailable. Previously collected evidence may still appear while it remains within the active window.",
+      notice: isFixture ? "Fictional public-source fixtures. No live internet signals were collected." : complete === configuredSources.length ? null : available > 0 ? "Some source queries could not be completed. Momentum is based on the available evidence." : "All sources are currently unavailable. Previously collected evidence may still appear while it remains within the active window.",
     };
     if (enrichmentRun.heuristicEnriched) template.notice = [template.notice, `${enrichmentRun.heuristicEnriched} signals used deterministic heuristic topic matching.`].filter(Boolean).join(" ");
     if (enrichmentRun.fallbackCount) {

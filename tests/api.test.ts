@@ -31,7 +31,7 @@ describe("public read API contracts", () => {
     const response = await pulse(request("pulse?window=" + window)), data = await response.json();
     expect(response.status).toBe(200); expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(data.window).toBe(window); expect(data.signalCount).toBe(count);
-    expect(data.snapshot).toMatchObject({ scoringWindow: "2h", queryWindow: window, algorithmVersion: "v2" });
+    expect(data.snapshot).toMatchObject({ scoringWindow: "2h", queryWindow: window, algorithmVersion: "v3" });
     expect(data.topTopics).toHaveLength(6); expect(data.risingTopics.every((t: { lifecycle: string }) => ["HOT", "RISING", "EMERGING"].includes(t.lifecycle))).toBe(true);
     expect(data.sourceStream).toHaveLength(30); expect(data.streamTruncated).toBe(true);
     expect(data.availableSources).toEqual(["gdelt", "bluesky", "hackernews"]); expect(data.lastSuccessfulIngestion).toBeNull();
@@ -61,7 +61,7 @@ describe("public read API contracts", () => {
     expect(response.status).toBe(200);
     expect(data).toMatchObject({ summary: expect.any(String), pulseScore: expect.any(Number), confidence: expect.any(Number), lifecycle: "HOT",
       growth: { current2h: 24, previous2h: 5, ratio: 25 / 6 }, evidenceTruncated: true, historyTruncated: false });
-    expect(data.history.at(-1)).toMatchObject({ algorithmVersion: "v2", pulseScore: data.pulseScore });
+    expect(data.history.at(-1)).toMatchObject({ algorithmVersion: "v3", pulseScore: data.pulseScore });
     expect(data.sourceEvidence).toHaveLength(30); expect(data.relatedSignals.length).toBeGreaterThan(0);
     expect(data.relatedSignals.every((s: { topicSlug: string }) => s.topicSlug !== "namma-metro")).toBe(true);
   });

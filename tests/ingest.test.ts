@@ -16,7 +16,7 @@ function adapters(failed?: Source): Record<Source, SourceAdapter> {
     return { signals: [0, 1].map((i) => ({ ...observation(`${source}-${i}`, 0.5 + i * 0.5, source), text: `Bengaluru metro ${source} discussion ${i}`, title: i ? "Bangalore metro service delayed" : "Bengaluru metro service delays" })),
       health: { source, status: "ok" as const, fetched: 2, accepted: 2, rejected: 0, durationMs: 10, checkedAt: now.toISOString() } };
   };
-  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews") };
+  return { gdelt: adapter("gdelt"), bluesky: adapter("bluesky"), hackernews: adapter("hackernews"), currents: adapter("currents") };
 }
 describe("transactional pipeline", () => {
   it.each(["ENRICHMENT_PROVIDER", "AI_BATCH_SIZE"])("rejects invalid %s before storage or source work", async (name) => {

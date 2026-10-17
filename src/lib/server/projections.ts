@@ -1,8 +1,8 @@
 import "server-only";
 import { dashboardSchema, publicTopicSchema, topicDetailSchema, publicSignalSchema, publicSourceSchema, publicRunSchema,
   snapshotInfoSchema, publicHotspotSchema, historySnapshotSchema, healthSchema, topicListSchema, type ReadQuery, type PublicTopic, type TopicListQuery, type DashboardQuery } from "@/lib/domain/read-models";
-import { sources, coordinates, type SourceStatus, type Observation, type Source, type Pulse } from "@/lib/domain/schema";
-import { evaluateTopics, deduplicateEvidence, HOUR } from "@/lib/trends/engine";
+import { sources, coordinates, sourceTypeFor, type SourceStatus, type Observation, type Source, type Pulse } from "@/lib/domain/schema";
+import { evaluateTopics, deduplicateEvidence, HOUR, ALGORITHM_VERSION } from "@/lib/trends/engine";
 import { toObservations, toDomainTopic, fromSignal } from "@/lib/db/mapping";
 import type { ReadState, ReadRepository } from "@/lib/db/read-repository";
 import { topicRecordSchema, type ItemRecord, type IngestionRun } from "@/lib/db/records";
@@ -40,7 +40,15 @@ export function demoReadState(now: Date, slug?: string): ReadState {
       undefined, undefined, toDomainTopic(descriptor))) : [] };
 }
 export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now: Date, mode: Pulse["mode"], collections: CollectionRecord[] = []) {
-  return sources.map((source) => {
+  const latestCoreAttempt = [...stored.filter((s) => s.source !== "currents").map((s) => s.checkedAt),
+    ...collections.filter((c) => c.health.source !== "currents").map((c) => c.lastAttemptAt),
+    ...runs.filter((r) => r.source !== "currents").map((r) => r.startedAt)].sort().at(-1);
+  const currentsAttempt = [...collections.filter((c) => c.health.source === "currents").map((c) => c.lastAttemptAt),
+    ...runs.filter((r) => r.source === "currents").map((r) => r.startedAt)].sort().at(-1);
+  // Read only persisted configuration/evidence; web reads never inspect API keys.
+  const configured = sources.filter((source) => source !== "currents" || mode !== "demo" && (stored.some((s) => s.source === source)
+    || currentsAttempt !== undefined && (latestCoreAttempt === undefined || currentsAttempt >= latestCoreAttempt)));
+  return configured.map((source) => {
     const storedSource = stored.find((s) => s.source === source), run = runs.find((r) => r.source === source);
     let health: SourceStatus = storedSource ?? { source, status: "unavailable", fetched: 0, accepted: 0, rejected: 0,
       durationMs: 0, checkedAt: now.toISOString() };
@@ -71,12 +79,12 @@ function info(state: ReadState, query: ReadQuery, now: Date) {
   const capturedAt = state.snapshot?.generatedAt ?? null;
   const ageSeconds = capturedAt ? Math.max(0, (now.getTime() - Date.parse(capturedAt)) / 1000) : null;
   const cacheAgeSeconds = Math.max(0, (now.getTime() - Date.parse(state.loadedAt)) / 1000);
-  return snapshotInfoSchema.parse({ algorithmVersion: "v2", storedVersion: state.snapshot?.version ?? null,
+  return snapshotInfoSchema.parse({ algorithmVersion: ALGORITHM_VERSION, storedVersion: state.snapshot?.version ?? null,
     capturedAt, evaluatedAt: now.toISOString(), ageSeconds, scoringWindow: "2h", queryWindow: query.window,
     stale: ageSeconds === null || ageSeconds * 1000 > STALE_MS, cacheAgeSeconds, refreshDelayed: cacheAgeSeconds > 30 });
 }
 function publicSignal(item: ItemRecord, topics: ReadonlyMap<string, ReadState["topics"][number]>) {
-  return publicSignalSchema.parse({ id: item.id, source: item.source, sourceType: item.source === "gdelt" ? "news" : item.source === "bluesky" ? "social" : "tech",
+  return publicSignalSchema.parse({ id: item.id, source: item.source, sourceType: sourceTypeFor[item.source],
     url: item.originalUrl, title: item.title, excerpt: item.excerpt.slice(0, 600), domain: item.domain, publishedAt: item.publishedAt,
     timeKind: item.timeKind, topicSlug: topics.get(item.topicId ?? "")?.slug ?? null, neighborhood: item.neighborhood,
     enrichmentStatus: item.enrichmentStatus, enrichmentProvider: item.enrichmentProvider });
@@ -132,7 +140,7 @@ function projectionStatus(state: ReadState, query: ReadQuery, now: Date, failure
   const notices = [failureNotice, state.snapshot?.notice,
     snapshot.stale && state.snapshot ? "The collection is over 90 minutes old; displayed metrics have been aged using the current time." : null,
     snapshot.refreshDelayed ? "The latest data refresh is delayed; showing the last available snapshot." : null,
-    state.snapshot?.version === "v1" ? "Scoring updated to v2 using retained evidence; the collection timestamp is unchanged." : null];
+    state.snapshot?.version === "v1" ? `Scoring updated to ${ALGORITHM_VERSION} using retained evidence; the collection timestamp is unchanged.` : null];
   return { snapshot, sourceStatuses, status,
     notice: notices.filter(Boolean).join(" ") || (status === "unavailable" ? "No live snapshot is available yet." : null) };
 }
