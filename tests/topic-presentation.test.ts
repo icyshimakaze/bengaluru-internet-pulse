@@ -38,7 +38,7 @@ it("serializes only displayed evidence provenance to browser components", () => 
   const signal = projectTopic(demoReadState(FIXTURE_NOW, "namma-metro"), "namma-metro", FIXTURE_NOW)!.sourceEvidence[0]!;
   const links = evidenceLinks([{ ...signal, excerpt: "UNNECESSARY_CONTENT" }]);
   expect(links[0]).toEqual({ id: signal.id, source: signal.source, sourceType: signal.sourceType,
-    url: signal.url, title: signal.title, domain: signal.domain, publishedAt: signal.publishedAt, timeKind: signal.timeKind });
+    url: signal.url, title: signal.title, domain: signal.domain, publishedAt: signal.publishedAt, timeKind: signal.timeKind, language: signal.language });
   expect(JSON.stringify(links)).not.toContain("UNNECESSARY_CONTENT");
 });
 describe("supported neighborhoods", () => {

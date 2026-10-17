@@ -2,6 +2,7 @@
 import { memo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { LanguageBadge } from "./language-badge";
 import { SourceAttribution } from "./source-attribution";
 import { sourceNames } from "@/lib/domain/source-labels";
 import type { DashboardData } from "@/lib/domain/read-models";
@@ -22,12 +23,12 @@ export const SourceStream = memo(function SourceStream({ pulse }: { pulse: Dashb
     <ol className="stream-list">{stream.map((signal) => <li key={signal.id}>
       <div className="stream-time"><time dateTime={signal.publishedAt} title={`${formatDate(signal.publishedAt)} · ${formatTime(signal.publishedAt)} IST · ${signal.timeKind}`}>{pulse.mode === "demo" ? formatTime(signal.publishedAt) : elapsedLabel(signal.publishedAt, now)}</time><span className="stream-time-kind">{signal.timeKind === "discovered" ? "Discovered" : "Published"}</span></div>
       <div className="stream-provenance"><span className={`stream-source-name provider-${signal.source}`}>{sourceNames[signal.source]}</span><span className="stream-type mono">{pulse.mode === "demo" ? "EXAMPLE" : signal.sourceType.toUpperCase()}</span></div>
-      <div className="stream-evidence">{pulse.mode === "demo" ? <span className="demo-evidence-title">{signal.title}</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">{signal.title}<ArrowUpRight size={15} aria-hidden="true" /><span className="sr-only"> · original source (opens in a new tab)</span></a>}<p>{signal.domain}{signal.enrichmentStatus !== "completed" ? " · Awaiting topic matching" : ""}</p>{pulse.mode === "live" && <SourceAttribution source={signal.source} />}</div>
+      <div className="stream-evidence">{pulse.mode === "demo" ? <span className="demo-evidence-title">{signal.title}</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">{signal.title}<ArrowUpRight size={15} aria-hidden="true" /><span className="sr-only"> · original source (opens in a new tab)</span></a>}<LanguageBadge language={signal.language} text={signal.title + " " + signal.excerpt} /><p>{signal.domain}{signal.enrichmentStatus !== "completed" ? " · Awaiting topic matching" : ""}</p>{pulse.mode === "live" && <SourceAttribution source={signal.source} />}</div>
       <div className="stream-location"><span>{signal.neighborhood ?? "Citywide / Unknown"}</span>{signal.topicSlug && <Link className="stream-topic-link" href={`/topic/${signal.topicSlug}`}>Topic brief ↗</Link>}</div>
     </li>)}</ol>
     {!stream.length && <div className="stream-empty"><p>No collected evidence in this selection.</p><span>{pulse.stale || pulse.status === "unavailable" || !pulse.availableSources.length ? "Source coverage is delayed or unavailable. See system status for the last successful collection." : "Try a wider window or another source type."}</span></div>}
     {filtered.length > 6 && <button className="stream-expand editorial-link" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show fewer signals ↑" : "Show " + (filtered.length - 6) + " more signals ↓"}</button>}
-    <div className="stream-source-health" aria-label="Source health">{pulse.sources.map((source) => <span key={source.source}><span className={`health-dot state-${source.healthState}`} aria-hidden="true" /><strong>{sourceNames[source.source]}</strong><span>{pulse.mode === "demo" ? "Demo" : source.healthState}</span></span>)}<Link href="/about#source-health">Collection details ↗</Link></div>
-    <p className="stream-note">Repeated polls and syndicated copies are deduplicated.{pulse.streamTruncated ? " Latest 30 signals loaded; source-type filters apply to these rows." : ""} Public search is a sample, not a census.</p>
+    <div className="stream-source-health" aria-label="Source health">{pulse.sources.map((source) => <span key={source.source}><span className={`health-dot state-${source.healthState}`} aria-hidden="true" /><strong>{sourceNames[source.source]}</strong><span>{pulse.mode === "demo" ? "Demo" : source.healthState}</span></span>)}<Link href="/status">Collection details ↗</Link></div>
+    <p className="stream-note">Repeated polls and syndicated copies are deduplicated.{pulse.streamTruncated ? " Latest 30 signals loaded; source-type filters apply to these rows." : ""}</p>
   </section>;
 });

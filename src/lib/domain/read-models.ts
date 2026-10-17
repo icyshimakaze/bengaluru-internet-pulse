@@ -4,6 +4,7 @@ import { categorySchema, sourceSchema, sourceTypeSchema, slugSchema, neighborhoo
 import { semanticCategorySchema } from "./enrichment";
 import { storedEnrichmentProviderSchema } from "./enrichment-providers";
 import { sourceHealthStateSchema } from "./source-health";
+import { languages } from "./language";
 
 // Retain the original editorial buckets for existing API consumers.
 export const readCategorySchema = z.union([semanticCategorySchema, categorySchema]);
@@ -20,6 +21,7 @@ export type TopicListQuery = z.infer<typeof topicListQuerySchema>;
 export const publicSignalSchema = z.object({ id: z.string().min(1), source: sourceSchema, sourceType: sourceTypeSchema,
   url: httpUrlSchema, title: z.string().min(3).max(300), excerpt: z.string().max(600), domain: z.string().min(1),
   publishedAt: z.iso.datetime(), timeKind: z.enum(["published", "discovered"]), topicSlug: slugSchema.nullable(),
+  language: z.enum(languages).optional(),
   neighborhood: neighborhoodSchema.nullable(), enrichmentStatus: z.enum(["pending", "completed", "failed"]),
   enrichmentProvider: storedEnrichmentProviderSchema.nullable().default(null) }).strict();
 export type PublicSignal = z.infer<typeof publicSignalSchema>;
@@ -36,6 +38,7 @@ export const publicSourceSchema = sourceStatusSchema.omit({ error: true }).exten
   lastAttemptAt: z.iso.datetime().nullable(), lastSuccessAt: z.iso.datetime().nullable(), lastItemAt: z.iso.datetime().nullable(),
   lastErrorAt: z.iso.datetime().nullable(), lastErrorType: z.string().regex(/^[A-Z][A-Z0-9_]{0,79}$/u).nullable(),
   itemsLastRun: z.number().int().nonnegative(),
+  consecutiveFailures: z.number().int().nonnegative().optional(),
 }).strict();
 export const publicRunSchema = z.object({ source: sourceSchema, startedAt: z.iso.datetime(), finishedAt: z.iso.datetime().nullable(),
   status: z.enum(["running", "completed", "partial", "failed", "abandoned"]), discovered: z.number().int().nonnegative(),

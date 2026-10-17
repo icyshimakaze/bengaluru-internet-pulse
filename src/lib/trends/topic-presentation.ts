@@ -14,11 +14,11 @@ export function evidenceHeadline(value: string): string | null {
   return (boundary >= 60 ? prefix.slice(0, boundary) : prefix).trimEnd() + "…";
 }
 
-export type TopicEvidenceLink = Pick<PublicSignal, "id" | "source" | "sourceType" | "url" | "title" | "domain" | "publishedAt" | "timeKind">;
+export type TopicEvidenceLink = Pick<PublicSignal, "id" | "source" | "sourceType" | "url" | "title" | "domain" | "publishedAt" | "timeKind" | "language">;
 /** Serialize only the provenance displayed by interactive evidence cards. */
 export function evidenceLinks(signals: readonly PublicSignal[]): TopicEvidenceLink[] {
-  return signals.map(({ id, source, sourceType, url, title, domain, publishedAt, timeKind }) =>
-    ({ id, source, sourceType, url, title, domain, publishedAt, timeKind }));
+  return signals.map(({ id, source, sourceType, url, title, domain, publishedAt, timeKind, language }) =>
+    ({ id, source, sourceType, url, title, domain, publishedAt, timeKind, ...(language ? { language } : {}) }));
 }
 
 /** Describes observed counts, never why an event happened or whether it is true. */

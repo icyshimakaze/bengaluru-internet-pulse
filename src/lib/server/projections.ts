@@ -12,6 +12,8 @@ import { legacySemanticCategory, type EnrichmentResult } from "@/lib/domain/enri
 import { supportedLocation, evidenceHeadline } from "@/lib/trends/topic-presentation";
 import { collectionState, type CollectionRecord } from "@/lib/domain/source-health";
 import { activityWindows, meaningfulWindow } from "@/lib/trends/window-selection";
+import { leadEligible } from "@/lib/trends/lead-eligibility";
+import { detectLanguage } from "@/lib/domain/language";
 
 export const STALE_MS = 90 * 60000;
 const order = (a: PublicTopic, b: PublicTopic) => b.score - a.score || b.velocity - a.velocity || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
@@ -71,6 +73,7 @@ export function publicSources(stored: SourceStatus[], runs: IngestionRun[], now:
       stale: !record.lastSuccessAt || now.getTime() - Date.parse(record.lastSuccessAt) > STALE_MS || Date.parse(record.lastSuccessAt) > now.getTime(),
       lastAttemptAt: record.lastAttemptAt, lastSuccessAt: record.lastSuccessAt, lastItemAt: record.lastItemAt,
       lastErrorAt: record.lastErrorAt, lastErrorType: record.lastErrorType, itemsLastRun: record.itemsLastRun,
+      consecutiveFailures: record.consecutiveFailures,
       ingestionStatus: mode === "demo" ? null : run?.status ?? null });
   });
 }
@@ -87,6 +90,7 @@ function publicSignal(item: ItemRecord, topics: ReadonlyMap<string, ReadState["t
   return publicSignalSchema.parse({ id: item.id, source: item.source, sourceType: sourceTypeFor[item.source],
     url: item.originalUrl, title: item.title, excerpt: item.excerpt.slice(0, 600), domain: item.domain, publishedAt: item.publishedAt,
     timeKind: item.timeKind, topicSlug: topics.get(item.topicId ?? "")?.slug ?? null, neighborhood: item.neighborhood,
+    language: detectLanguage(`${item.title} ${item.excerpt}`),
     enrichmentStatus: item.enrichmentStatus, enrichmentProvider: item.enrichmentProvider });
 }
 function selected(evidence: readonly Observation[], query: ReadQuery, now: Date) {
@@ -160,7 +164,7 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
   const effective = requested.window === "now" ? meaningfulWindow(activityWindows.map((window) => {
     const query: ReadQuery = { ...requested, window };
     const metrics = windows.get(window)!;
-    return { window, topics: state.snapshot ? topicCandidates(metrics, query, now).length : 0,
+    return { window, topics: state.snapshot ? topicCandidates(metrics, query, now).filter((t) => leadEligible(t.public)).length : 0,
       signals: state.items.filter((item) => Date.parse(item.publishedAt) <= now.getTime()
         && Date.parse(item.publishedAt) > now.getTime() - Number.parseInt(window) * HOUR
         && item.enrichmentStatus !== "irrelevant" && (!query.source || item.source === query.source)
@@ -185,7 +189,7 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
   })
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   const visible = state.snapshot ? candidates : [];
-  const rankedSlugs = new Set(visible.map((t) => t.public.slug));
+  const rankedSlugs = new Set(visible.filter((t) => leadEligible(t.public)).map((t) => t.public.slug));
   // Singleton and quieter conversations remain discoverable without entering
   // the momentum ranking or receiving a fabricated popularity measure.
   const recentConversations = (state.snapshot ? baseMetrics : [])
@@ -195,7 +199,7 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
     .map(({ topic, evidence }) => ({ slug: topic.slug, title: topic.title, category: topic.semanticCategory,
       neighborhood: evidence.find((o) => o.neighborhood)?.neighborhood ?? null,
       latestAt: evidence.map((o) => o.publishedAt).sort().at(-1)!, signalCount: evidence.length, sources: [...new Set(evidence.map((o) => o.source))] }))
-    .sort((a, b) => b.latestAt.localeCompare(a.latestAt) || a.slug.localeCompare(b.slug)).slice(0, 8);
+    .sort((a, b) => b.latestAt.localeCompare(a.latestAt) || b.sources.length - a.sources.length || a.slug.localeCompare(b.slug)).slice(0, 8);
   return dashboardSchema.parse({ version: "v2", mode: state.mode, generatedAt: snapshot.capturedAt, evaluatedAt: snapshot.evaluatedAt,
     stale: snapshot.stale, status, totalSignals: state.snapshot ? deduplicateEvidence(toObservations(state.items, state.topics), now)
       .filter((item) => Date.parse(item.publishedAt) >= now.getTime() - 24 * HOUR).length : 0,

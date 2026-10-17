@@ -1,4 +1,11 @@
 /* The city signal edition. Shared data grid; text retains a readable measure. */
+.language-badge { display: inline-block; margin: 6px 8px 0 0; padding: 2px 6px; border: 1px solid #adb8a9; border-radius: 3px; color: #252e29; font-size: 12px; }
+.sampling-note { font-size: 12px; margin-top: 10px; color: #62685e; }
+.reading-help { margin: 18px 0; }
+.reading-help dl { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 6px 15px; }
+.reading-help dt { font-weight: 600; }
+.status-page .system-source-list small { display: block; }
+.editorial-footer .live-indicator { white-space: normal; min-height: 44px; font-size: 12px; }
 :root {
   --background: #f8f7f2;
   --surface: #f1f1e9;

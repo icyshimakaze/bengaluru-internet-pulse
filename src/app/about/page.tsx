@@ -32,7 +32,7 @@ export default async function AboutPage() {
     <section id="limitations" className="about-limitations" aria-labelledby="limitations-heading">
       <h2 id="limitations-heading">Limits of the picture</h2>
       <p><strong>Bengaluru Pulse is an experimental signal detector.</strong></p>
-      <p>It does not measure the opinions of all Bengaluru residents.</p>
+      <p>Public signals are samples, not a census of Bengaluru. Private groups and unsampled conversations are outside this view; platform access and language coverage affect the picture.</p>
       <p>Data availability varies by platform.</p>
       <p>Trend scores measure activity in observed public sources, not objective importance or truth.</p>
     </section>
@@ -58,7 +58,7 @@ export default async function AboutPage() {
       <div className="about-source"><h3>Currents</h3><p>Additional news discovery when configured. Article dates mark publication; publisher links remain attached. News indexes share one scoring channel, so overlapping coverage does not inflate diversity.</p><a href="https://currentsapi.services/" target="_blank" rel="noopener noreferrer">Powered by Currents News API<span className="sr-only"> (opens in a new tab)</span></a></div>
       <div className="about-source"><h3>Bluesky</h3><p>Public posts from AppView search. Results are sampled and can be incomplete or unavailable. Mentioning a place does not locate the author.</p><a href="https://docs.bsky.app/docs/advanced-guides/api-directory" target="_blank" rel="noopener noreferrer">Public API directory ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
       <div className="about-source"><h3>Hacker News</h3><p>Bengaluru-related stories and public comments via Algolia. A technical community&apos;s perspective, with a small and selective audience.</p><a href="https://hn.algolia.com/api" target="_blank" rel="noopener noreferrer">Algolia search API ↗<span className="sr-only"> (opens in a new tab)</span></a></div>
-      <p>Public search is a sample, not a census. Private groups and unsampled conversations are outside this view.</p>
+
       <p>Search caps, indexing delays, language bias, coordinated posts and sparse local evidence affect coverage. Deduplication catches repeated links and matching text, but not every paraphrase. A burst can reflect confusion or disagreement. Follow the original evidence before drawing conclusions.</p>
     </section>
 
@@ -89,7 +89,7 @@ export default async function AboutPage() {
 
     <section id="live"><h2>Freshness stays visible</h2>
       <p>Collection is scheduled twice an hour. A source is Live for 45 minutes after a successful poll, Delayed up to 90 minutes and Stale after that. A recent failed or partial poll is Degraded while earlier successful coverage remains fresh; a failure without recent success is Error. A successful poll with zero matching results is still Live. These states are independent of the selected activity window and topic matching.</p>
-      <p>NOW shows the shortest window with a qualifying topic, or the shortest with collected evidence. Any expansion is labeled; an explicit 2H, 6H or 24H selection stays fixed. Scores always compare the latest two hours with the previous two. Snapshots older than 90 minutes are labeled stale, and scores age against the current time. Collection, enrichment and publication have separate status details. Public page reads never trigger collection.</p>
+      <p>NOW shows the shortest window with lead-quality evidence, falling back to 24H. The lead requires two current signals, a positive score and confidence of at least 35%. Below-threshold topics remain Recently observed, ordered by recency and source count. Any expansion is labeled; an explicit 2H, 6H or 24H selection stays fixed. Scores always compare the latest two hours with the previous two. Snapshots older than 90 minutes are labeled stale, and scores age against the current time. Collection, enrichment and publication have separate details on /status; heuristic fallback alone does not mean collection is degraded. Public page reads never trigger collection.</p>
       <p>DEMO uses fictional, reproducible evidence with the real scoring engine. It is always labeled and never substitutes for missing live data. Original timestamps, source links, coverage gaps and failed reads remain visible.</p>
     </section>
 

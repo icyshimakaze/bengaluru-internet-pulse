@@ -63,32 +63,42 @@ test("NOW widens quiet windows honestly and explicit selections stay fixed", asy
   await expect(page.locator(".trend-entry")).toHaveCount(0);
 });
 
-test("older wider-window conversations are labeled recent activity rather than current momentum", async ({ page, request }) => {
+test("older wider-window conversations never become a scored lead", async ({ page, request }) => {
   const stored = await (await request.get("/api/pulse?window=6h")).json();
   await page.goto("/");
   await page.route("**/api/pulse?**", (route) => route.fulfill({ json: { ...stored, requestedWindow: "now",
     topTopics: stored.topTopics.map((topic: Record<string, unknown>) => ({ ...topic, current2h: 0, sourceCount: 0, score: 0, lifecycle: "COOLING" })),
+    recentConversations: stored.topTopics.slice(0, 4).map((topic: Record<string, unknown>) => ({ slug: topic.slug,
+      title: topic.title, category: topic.semanticCategory, neighborhood: topic.neighborhood, latestAt: stored.evaluatedAt,
+      signalCount: topic.activityCount, sources: ["gdelt"] })),
   } }));
   await page.getByRole("button", { name: "Refresh pulse" }).click();
-  await expect(page.locator("#rising-heading")).toContainText("Recent activity");
-  await expect(page.locator(".lead-overline")).toContainText("RECENTLY OBSERVED");
-  await expect(page.locator(".lead-overline")).not.toContainText("LEADING MOMENTUM");
+  await expect(page.locator("#rising-heading")).toContainText("Recent observations");
+  await expect(page.locator(".lead-topic")).toHaveCount(0);
+  await expect(page.locator(".trend-entry")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Top stories in the last 24 hours" })).toBeVisible();
+  await expect(page.locator(".recent-conversations")).not.toContainText("Pulse Score");
   await expect(page.locator(".window-explanation")).toContainText("2H is quiet");
 });
 
-test("status drawer separates collection and enrichment and supports keyboard dismissal", async ({ page }) => {
+test("status page separates collection and enrichment with one masthead and footer links", async ({ page }) => {
   await page.goto("/");
-  const trigger = page.getByRole("button", { name: "System status: DEMO" });
-  await trigger.click();
-  const drawer = page.getByRole("dialog", { name: "Behind the pulse" });
-  await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole("heading", { name: "Collection", exact: true })).toBeVisible();
-  await expect(drawer.getByRole("heading", { name: "Enrichment", exact: true })).toBeVisible();
-  await expect(drawer).toContainText("Not used in demo");
+  await expect(page.getByRole("banner")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Behind the pulse" })).toHaveCount(0);
+  await expect(page.getByRole("banner").getByRole("link", { name: /GitHub/ })).toHaveCount(0);
+  await page.getByRole("link", { name: "Status · Demo" }).click();
+  await expect(page).toHaveURL(/\/status$/);
+  await expect(page.getByRole("heading", { name: "Behind the pulse" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Collection", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Enrichment", exact: true })).toBeVisible();
+  await expect(page.locator("main")).toContainText("Not used in demo");
   expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
-  await page.keyboard.press("Escape");
-  await expect(drawer).not.toBeVisible();
-  await expect(trigger).toBeFocused();
+  for (const path of ["/privacy", "/terms"]) {
+    await page.goto(path);
+    await expect(page.locator("main h1")).toBeVisible();
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+  }
+  await expect(page.getByRole("link", { name: "Contact", exact: true })).toHaveCount(0);
 });
 
 test("source-type controls browse loaded evidence and topic shares copy the canonical URL", async ({ page, context }) => {

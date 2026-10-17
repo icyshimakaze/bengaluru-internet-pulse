@@ -16,8 +16,10 @@ export async function checkpointCollection(client: Client, input: SourceStatus, 
     lastSuccessAt: success ? health.checkedAt : null, lastItemAt: itemAt,
     lastErrorAt: failed ? health.checkedAt : null, lastErrorType: code, itemsLastRun: health.accepted });
   await client.execute({ sql: `INSERT INTO source_collections
-    (source,is_fixture,last_attempt_at,last_success_at,last_item_at,last_error_at,last_error_type,items_last_run,payload)
-    VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(source,is_fixture) DO UPDATE SET
+    (source,is_fixture,last_attempt_at,last_success_at,last_item_at,last_error_at,last_error_type,items_last_run,payload,consecutive_failures)
+    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source,is_fixture) DO UPDATE SET
+      consecutive_failures=CASE WHEN excluded.last_attempt_at=source_collections.last_attempt_at THEN source_collections.consecutive_failures
+        WHEN excluded.consecutive_failures=0 THEN 0 ELSE source_collections.consecutive_failures+1 END,
       last_attempt_at=excluded.last_attempt_at,
       last_success_at=coalesce(excluded.last_success_at,source_collections.last_success_at),
       last_item_at=CASE WHEN source_collections.last_item_at IS NULL THEN excluded.last_item_at
@@ -27,7 +29,7 @@ export async function checkpointCollection(client: Client, input: SourceStatus, 
       last_error_type=coalesce(excluded.last_error_type,source_collections.last_error_type),
       items_last_run=excluded.items_last_run,payload=excluded.payload
     WHERE excluded.last_attempt_at>=source_collections.last_attempt_at`, args: [health.source, Number(isFixture), value.lastAttemptAt,
-    value.lastSuccessAt, value.lastItemAt, value.lastErrorAt, value.lastErrorType, value.itemsLastRun, JSON.stringify(health)] });
+    value.lastSuccessAt, value.lastItemAt, value.lastErrorAt, value.lastErrorType, value.itemsLastRun, JSON.stringify(health), Number(failed)] });
 }
 
 export async function readCollections(client: Client, now: Date, isFixture: boolean) {
@@ -39,7 +41,8 @@ export async function readCollections(client: Client, now: Date, isFixture: bool
   return rows.rows.map((row) => {
     const value = collectionRecordSchema.parse({ health: sourceStatusSchema.parse(JSON.parse(String(row.payload))),
       lastAttemptAt: row.last_attempt_at, lastSuccessAt: row.last_success_at, lastItemAt: row.last_item_at,
-      lastErrorAt: row.last_error_at, lastErrorType: row.last_error_type, itemsLastRun: row.items_last_run });
+      lastErrorAt: row.last_error_at, lastErrorType: row.last_error_type, itemsLastRun: row.items_last_run,
+      consecutiveFailures: row.consecutive_failures ?? 0 });
     if (value.health.source !== row.source) throw new Error("COLLECTION_IDENTITY_MISMATCH");
     return value;
   });

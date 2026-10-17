@@ -1,13 +1,14 @@
 "use client";
 import { useState } from "react";
 import type { TopicEvidenceLink } from "@/lib/trends/topic-presentation";
+import { LanguageBadge } from "./language-badge";
 import { SourceAttribution } from "./source-attribution";
 import { sourceNames, sources } from "@/lib/domain/source-labels";
 import type { Source } from "@/lib/domain/schema";
 import { formatDate, formatTime } from "@/lib/format";
 
 function EvidenceCard({ signal, mode }: { signal: TopicEvidenceLink; mode: "demo" | "live" }) {
-  return <li className="topic-evidence-card"><div className="evidence-card-top"><span className="evidence-provider">{sourceNames[signal.source]}</span><span className="mono evidence-card-kind">{mode === "demo" ? "FICTIONAL EXAMPLE" : signal.sourceType.toUpperCase()}</span></div><h3>{signal.title}</h3><p className="evidence-card-domain">{signal.domain}{mode === "live" && <SourceAttribution source={signal.source} />}</p><div className="evidence-card-bottom"><span><time dateTime={signal.publishedAt}>{formatDate(signal.publishedAt)} · {formatTime(signal.publishedAt)} IST</time><small>{signal.timeKind === "discovered" ? "Discovered by source" : "Published by source"}</small></span>{mode === "demo" ? <span className="demo-evidence-note">Fictional example · no original article</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">Open Original <span aria-hidden="true">→</span><span className="sr-only">: {signal.title} (opens in a new tab)</span></a>}</div></li>;
+  return <li className="topic-evidence-card"><div className="evidence-card-top"><span className="evidence-provider">{sourceNames[signal.source]}</span><span className="mono evidence-card-kind">{mode === "demo" ? "FICTIONAL EXAMPLE" : signal.sourceType.toUpperCase()}</span></div><h3>{signal.title}</h3><LanguageBadge language={signal.language} text={signal.title} /><p className="evidence-card-domain">{signal.domain}{mode === "live" && <SourceAttribution source={signal.source} />}</p><div className="evidence-card-bottom"><span><time dateTime={signal.publishedAt}>{formatDate(signal.publishedAt)} · {formatTime(signal.publishedAt)} IST</time><small>{signal.timeKind === "discovered" ? "Discovered by source" : "Published by source"}</small></span>{mode === "demo" ? <span className="demo-evidence-note">Fictional example · no original article</span> : <a href={signal.url} target="_blank" rel="noopener noreferrer">Open Original <span aria-hidden="true">→</span><span className="sr-only">: {signal.title} (opens in a new tab)</span></a>}</div></li>;
 }
 export function TopicEvidence({ evidence, mode, total, truncated }: {
   evidence: TopicEvidenceLink[]; mode: "demo" | "live"; total: number; truncated: boolean;

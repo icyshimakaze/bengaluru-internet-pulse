@@ -25,6 +25,18 @@ const emptyAdapters = (): Record<Source, SourceAdapter> => {
 
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 describe("collection health is independent of activity and enrichment", () => {
+  it("counts consecutive problem polls idempotently and resets on successful empty collection", async () => {
+    const repo = testRepository(); await repo.initialize();
+    await checkpointCollection(repo.client, health("error"), [], false, now);
+    await checkpointCollection(repo.client, health("error"), [], false, now);
+    expect((await readCollections(repo.client, now, false))[0]?.consecutiveFailures).toBe(1);
+    const later = new Date(now.getTime() + 60000);
+    await checkpointCollection(repo.client, { ...health("partial"), checkedAt: later.toISOString() }, [], false, later);
+    expect((await readCollections(repo.client, later, false))[0]?.consecutiveFailures).toBe(2);
+    const success = new Date(later.getTime() + 60000);
+    await checkpointCollection(repo.client, { ...health(), checkedAt: success.toISOString() }, [], false, success);
+    expect((await readCollections(repo.client, success, false))[0]?.consecutiveFailures).toBe(0);
+  });
   it("retains known historical success when upgrading before a failed new poll", async () => {
     const repo = testRepository(); await migrate(repo.client, loadMigrations().slice(0, 6), now);
     const succeededAt = new Date(now.getTime() - 10 * 60_000), failedAt = new Date(now.getTime() - 5 * 60_000);
@@ -106,11 +118,11 @@ describe("collection health is independent of activity and enrichment", () => {
 });
 
 describe("NOW uses the shortest meaningful evidence window", () => {
-  it("widens honestly to 6h and preserves an explicit empty 2h selection", () => {
+  it("falls back honestly to 24h and preserves an explicit empty 2h selection", () => {
     const state = demoReadState(now), later = new Date(now.getTime() + 3 * 3_600_000);
     const smart = projectDashboard(state, { window: "now" }, later);
     const exact = projectDashboard(state, { window: "2h" }, later);
-    expect(smart).toMatchObject({ requestedWindow: "now", window: "6h", snapshot: { scoringWindow: "2h", queryWindow: "6h" } });
+    expect(smart).toMatchObject({ requestedWindow: "now", window: "24h", snapshot: { scoringWindow: "2h", queryWindow: "24h" } });
     expect(smart.topTopics.length).toBeGreaterThan(0);
     expect(smart.topTopics.every((topic) => topic.current2h === 0)).toBe(true);
     expect(exact).toMatchObject({ window: "2h", requestedWindow: "2h", topTopics: [], sourceStream: [] });
@@ -122,12 +134,12 @@ describe("NOW uses the shortest meaningful evidence window", () => {
     expect(pulse.topTopics.every((topic) => topic.semanticCategory === "food")).toBe(true);
     expect(pulse.sourceStream.every((signal) => signal.source === "gdelt")).toBe(true);
     const expired = projectDashboard(state, { window: "now" }, new Date(now.getTime() + 30 * 3_600_000));
-    expect(expired).toMatchObject({ window: "2h", sourceStream: [], topTopics: [], totalSignals: 0 });
+    expect(expired).toMatchObject({ window: "24h", sourceStream: [], topTopics: [], totalSignals: 0 });
   });
-  it("prefers qualifying topics, then observed signals, and has a deterministic quiet default", () => {
+  it("prefers qualifying topics, otherwise 24h, and has a deterministic quiet default", () => {
     expect(meaningfulWindow([{ window: "2h", topics: 0, signals: 1 }, { window: "6h", topics: 1, signals: 8 }])).toBe("6h");
-    expect(meaningfulWindow([{ window: "2h", topics: 0, signals: 0 }, { window: "6h", topics: 0, signals: 1 }])).toBe("6h");
-    expect(meaningfulWindow([])).toBe("2h");
+    expect(meaningfulWindow([{ window: "2h", topics: 0, signals: 0 }, { window: "6h", topics: 0, signals: 1 }])).toBe("24h");
+    expect(meaningfulWindow([])).toBe("24h");
   });
   it("formats UTC observations in IST across midnight without changing their stored timestamp", () => {
     const at = "2026-10-17T20:00:00.000Z";

@@ -10,8 +10,8 @@ test("editorial homepage explains Bengaluru, momentum, evidence and honest demo 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "What's moving Bengaluru?" })).toBeVisible();
   await expect(page.locator(".mode-notice")).toContainText("Fictional evidence. Real scoring engine.");
-  await expect(page.locator(".live-indicator")).not.toContainText("LIVE");
-  await expect(page.locator(".live-indicator")).toContainText("DEMO");
+  await expect(page.locator(".live-indicator")).not.toContainText("Live");
+  await expect(page.locator(".live-indicator")).toContainText("Demo");
   await expect(page.locator(".trend-entry")).toHaveCount(6);
   await expect(page.locator(".lead-topic")).toContainText("Whitefield");
   await expect(page.locator(".lead-evidence")).toContainText("Confidence");
@@ -160,12 +160,12 @@ test("LIVE requires actual fresh successful-ingestion metadata and expires hones
     sources: data.sources.map((s: object) => ({ ...s, status: "ok", stale: false, checkedAt: now })) };
   await page.clock.install();
   await page.goto("/");
-  await expect(page.locator(".live-indicator")).toContainText("DEMO");
+  await expect(page.locator(".live-indicator")).toContainText("Demo");
   await page.route("**/api/pulse?**", (route) => route.fulfill({ json: live }));
   await page.getByRole("button", { name: "Refresh pulse" }).click();
-  await expect(page.locator(".live-indicator")).toContainText("LIVE");
+  await expect(page.locator(".live-indicator")).toContainText("Live");
   await page.clock.fastForward(46 * 60_000);
-  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
+  await expect(page.locator(".live-indicator")).toContainText("Delayed");
 });
 
 test("desktop, tablet and mobile are accessible without overflow or hydration errors", async ({ page }) => {
@@ -194,8 +194,8 @@ test("desktop, tablet and mobile are accessible without overflow or hydration er
 test("unconfigured live mode is delayed, empty and operationally unavailable", async ({ page, request }) => {
   await page.goto(`${LIVE_BASE_URL}/`);
   await expect(page.getByRole("heading", { name: "Waiting for a pulse" })).toBeVisible();
-  await expect(page.locator(".live-indicator")).toContainText("DELAYED");
-  await expect(page.locator(".mode-notice")).not.toContainText("DEMO");
+  await expect(page.locator(".live-indicator")).toContainText("Delayed");
+  await expect(page.locator(".mode-notice")).not.toContainText("Demo");
   await expect(page.locator(".trend-entry")).toHaveCount(0);
   await expect(page.locator(".stat-updated dd")).toContainText("Pending");
   const response = await request.get(`${LIVE_BASE_URL}/api/pulse`);

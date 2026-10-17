@@ -1,5 +1,7 @@
 # Public read/query layer
 
+Portfolio presentation update: NOW falls back to 24H unless a topic passes the homepage lead gate (two latest-2H signals, positive score, confidence >=35%). Explicit windows and existing `topTopics` remain compatible. `recentConversations` also includes below-confidence topics, ordered by recency then supporting source count. Source records add optional `consecutiveFailures` (migration 0009); unknown historical counts are zero. Signals add optional script-estimated `language`; older payloads remain valid. `/api/health` remains unchanged in route/aggregate semantics. See [verification](portfolio-readiness.md).
+
 Read routes and server functions are read-only. They never migrate, ingest, enrich or contact public sources/OpenAI/xKiro. Turso configuration and clients live in server-only modules. Public DTOs omit credentials, database URLs, source IDs, content hashes, duplicate text fields, internal batch/topic IDs, classification payloads and raw error messages.
 
 Public evidence includes the allowlisted actual `enrichmentProvider` (nullable for legacy/manual fixtures); dashboard enrichment metadata includes selected/actual providers and this run's AI/heuristic/error/fallback counters. A selected provider is not a claim that it processed evidence. Historical mock provenance stays marked as mock; new API failures identify heuristic fallback. No API keys, model payloads or provider exceptions are returned.

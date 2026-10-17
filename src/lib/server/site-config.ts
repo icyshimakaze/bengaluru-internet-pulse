@@ -13,10 +13,10 @@ export const publicSiteOriginSchema = httpUrlSchema.refine((value) => {
   } catch { return false; }
 }, "Use a public HTTPS origin without credentials, path, query or fragment");
 const siteUrlSchema = z.preprocess(blankToUndefined, publicSiteOriginSchema.optional());
-const schema = z.object({ SITE_URL: siteUrlSchema });
+const schema = z.object({ SITE_URL: siteUrlSchema, CONTACT_EMAIL: z.preprocess(blankToUndefined, z.email().optional()) });
 export function siteSettings(input: Record<string, string | undefined> = process.env) {
   const result = schema.safeParse(input);
-  if (!result.success) throw new Error("Invalid environment: SITE_URL must be a public HTTPS origin without credentials, path, query or fragment");
+  if (!result.success) throw new Error("Invalid environment: SITE_URL must be a public HTTPS origin without credentials, path, query or fragment; CONTACT_EMAIL must be an email address");
   return result.data;
 }
 

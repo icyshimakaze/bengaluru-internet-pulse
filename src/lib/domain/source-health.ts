@@ -8,6 +8,7 @@ export const collectionRecordSchema = z.object({
   lastItemAt: z.iso.datetime().nullable(), lastErrorAt: z.iso.datetime().nullable(),
   lastErrorType: z.string().regex(/^[A-Z][A-Z0-9_]{0,79}$/u).nullable(),
   itemsLastRun: z.number().int().nonnegative(),
+  consecutiveFailures: z.number().int().nonnegative().optional(),
 }).strict();
 export type CollectionRecord = z.infer<typeof collectionRecordSchema>;
 export const sourceHealthStateSchema = z.enum(["live", "delayed", "degraded", "stale", "error", "unavailable", "demo"]);
