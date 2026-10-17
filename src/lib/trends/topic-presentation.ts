@@ -1,6 +1,17 @@
 import type { HistorySnapshot, LocationEvidence, PublicSignal, PublicTopic } from "@/lib/domain/read-models";
 import { locationEvidenceSchema } from "@/lib/domain/read-models";
 
+/** A literal source headline with link/attribution noise removed, never a generated claim. */
+export function evidenceHeadline(value: string): string | null {
+  const cleaned = value.replace(/\b(?:https?:\/\/|www\.)\S+/giu, " ")
+    .split(/\b(?:original\s+post|source)\s*:/iu)[0]!
+    .replace(/#[\p{L}\p{N}_]+/gu, " ").replace(/\s+/gu, " ").trim();
+  if ((cleaned.match(/\p{L}/gu) ?? []).length < 3) return null;
+  if (cleaned.length <= 100) return cleaned;
+  const prefix = cleaned.slice(0, 97), boundary = prefix.lastIndexOf(" ");
+  return (boundary >= 60 ? prefix.slice(0, boundary) : prefix).trimEnd() + "…";
+}
+
 export type TopicEvidenceLink = Pick<PublicSignal, "id" | "source" | "sourceType" | "url" | "title" | "domain" | "publishedAt" | "timeKind">;
 /** Serialize only the provenance displayed by interactive evidence cards. */
 export function evidenceLinks(signals: readonly PublicSignal[]): TopicEvidenceLink[] {

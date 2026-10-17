@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evidenceExplanation, evidenceLinks, supportedLocation, observedMilestones } from "@/lib/trends/topic-presentation";
+import { evidenceExplanation, evidenceLinks, supportedLocation, observedMilestones, evidenceHeadline } from "@/lib/trends/topic-presentation";
 import { locationEvidenceSchema, type HistorySnapshot, type PublicSignal } from "@/lib/domain/read-models";
 import { demoReadState, projectTopic } from "@/lib/server/projections";
 import { FIXTURE_NOW } from "@/fixtures/demo";
@@ -10,6 +10,16 @@ const snapshot = (score: number, lifecycle: HistorySnapshot["lifecycle"], hour: 
   confidence: 0.7, velocityScore: 0.5, volumeScore: 0.5, diversityScore: 2 / 3, recencyScore: 0.9,
 });
 describe("evidence-grounded topic explanations", () => {
+  it("preserves the source's readable wording while removing URL and attribution noise", () => {
+    expect(evidenceHeadline("5th T20I: Play stopped as rain returns in Bengaluru. #INDvsWI https://example.org/story Source: @reporter Original Post: https://example.org/post"))
+      .toBe("5th T20I: Play stopped as rain returns in Bengaluru.");
+    expect(evidenceHeadline("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ #Bengaluru")).toBe("ಬೆಂಗಳೂರು ಮಳೆಯ ವರದಿ");
+    expect(evidenceHeadline("https://example.org/#news")).toBeNull();
+    const long = "A public source headline with Bengaluru context and enough complete words to require careful truncation while preserving its original facts";
+    const displayed = evidenceHeadline(long)!;
+    expect(displayed.length).toBeLessThanOrEqual(100); expect(displayed).toMatch(/…$/u);
+    expect(long.startsWith(displayed.slice(0, -1))).toBe(true);
+  });
   it("describes rising counts and provider coverage without attributing causes", () => {
     expect(evidenceExplanation({ current2h: 14, previous2h: 3, sourceCount: 3 })).toBe("Distinct mentions increased from 3 to 14 between successive two-hour windows, spanning 3 public source providers.");
   });

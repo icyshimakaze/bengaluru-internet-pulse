@@ -9,7 +9,7 @@ import { topicRecordSchema, type ItemRecord, type IngestionRun } from "@/lib/db/
 import { demoDataset, demoPulse } from "@/fixtures/demo";
 import { topicSnapshot } from "@/lib/trends/snapshots";
 import { legacySemanticCategory, type EnrichmentResult } from "@/lib/domain/enrichment";
-import { supportedLocation } from "@/lib/trends/topic-presentation";
+import { supportedLocation, evidenceHeadline } from "@/lib/trends/topic-presentation";
 import { collectionState, type CollectionRecord } from "@/lib/domain/source-health";
 import { activityWindows, meaningfulWindow } from "@/lib/trends/window-selection";
 
@@ -93,12 +93,15 @@ export function metricTopics(state: ReadState, query: ReadQuery, now: Date) {
     const { method: _method, currentCount: _current, baselineCount: _baseline, totalCount: _total, evidence: _evidence, ...safe } = t;
     void _method; void _current; void _baseline; void _total; void _evidence;
     const record = records.get(t.slug)!;
+    const keywordLabel = state.mode === "live" && record.enrichmentMethod === "rules" && record.canonicalLabel === record.canonicalLabel.toLowerCase();
+    const sourceHeadline = keywordLabel ? [...t.evidence].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt) || a.id.localeCompare(b.id))
+      .map((item) => evidenceHeadline(item.title)).find((title) => title !== null) : null;
     const activity = selected(t.evidence, { ...query, source: undefined }, now);
     const located = activity.filter((o) => o.neighborhood);
     const mentions = new Map<string, number>();
     for (const o of located) mentions.set(o.neighborhood!, (mentions.get(o.neighborhood!) ?? 0) + 1);
     const neighborhood = [...mentions].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? record.neighborhood;
-    return { public: publicTopicSchema.parse({ ...safe, activityCount: activity.length,
+    return { public: publicTopicSchema.parse({ ...safe, title: sourceHeadline ?? safe.title, activityCount: activity.length,
       semanticCategory: state.semanticCategories[record.id] ?? legacySemanticCategory[record.category], neighborhood }), evidence: t.evidence };
   });
 }

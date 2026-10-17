@@ -42,6 +42,16 @@ describe("truthful dashboard status", () => {
   });
 });
 describe("homepage taxonomy and fixture history", () => {
+  it("replaces live heuristic keyword display labels with literal evidence without changing rank identity or scores", () => {
+    const state = demoReadState(FIXTURE_NOW);
+    const original = projectDashboard(state, { window: "2h" }, FIXTURE_NOW);
+    const changed = { ...state, mode: "live" as const, topics: state.topics.map((topic) => ({ ...topic, canonicalLabel: topic.canonicalLabel.toLowerCase(), enrichmentMethod: "rules" as const })) };
+    const displayed = projectDashboard(changed, { window: "2h" }, FIXTURE_NOW);
+    expect(displayed.topTopics.map(({ slug, score, activityCount }) => ({ slug, score, activityCount })))
+      .toEqual(original.topTopics.map(({ slug, score, activityCount }) => ({ slug, score, activityCount })));
+    expect(displayed.topTopics[0]!.title).not.toBe(changed.topics.find((topic) => topic.slug === displayed.topTopics[0]!.slug)!.canonicalLabel);
+    expect(displayed.topTopics.every((topic) => topic.title.length <= 100)).toBe(true);
+  });
   it("makes a deduplicated singleton discoverable without promoting it into momentum, and honors filters", () => {
     const state = demoReadState(FIXTURE_NOW);
     const food = state.topics.find((topic) => topic.slug === "food-and-cafes")!;

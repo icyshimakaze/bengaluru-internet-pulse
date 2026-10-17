@@ -38,6 +38,19 @@ test("NOW widens quiet windows honestly and explicit selections stay fixed", asy
   await expect(page.locator(".trend-entry")).toHaveCount(0);
 });
 
+test("older wider-window conversations are labeled recent activity rather than current momentum", async ({ page, request }) => {
+  const stored = await (await request.get("/api/pulse?window=6h")).json();
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: { ...stored, requestedWindow: "now",
+    topTopics: stored.topTopics.map((topic: Record<string, unknown>) => ({ ...topic, current2h: 0, sourceCount: 0, score: 0, lifecycle: "COOLING" })),
+  } }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  await expect(page.locator("#rising-heading")).toContainText("Recent activity");
+  await expect(page.locator(".lead-overline")).toContainText("RECENTLY OBSERVED");
+  await expect(page.locator(".lead-overline")).not.toContainText("LEADING MOMENTUM");
+  await expect(page.locator(".window-explanation")).toContainText("2H is quiet");
+});
+
 test("status drawer separates collection and enrichment and supports keyboard dismissal", async ({ page }) => {
   await page.goto("/");
   const trigger = page.getByRole("button", { name: "System status: DEMO" });
