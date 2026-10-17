@@ -36,3 +36,8 @@ Run `npm run build`, start a local demo production server on port 4320, then run
 These are reproducible local fixture measurements, not remote Turso latency measurements or field Core Web Vitals.
 
 Final validation: `npm run lint`, `npm test -- --maxWorkers=2` (383 tests), `npm run build`, and `npm run test:e2e -- --workers=2` (28 browser tests) passed. Bounded workers avoid competing with the production compiler for local resources.
+# City signal edition measurements — 17 October 2026
+
+Current production-build measurements: home 563,668 B JS / 170,374 B gzip estimate; topic 884,273 B / 261,358 B; methodology 491,750 B / 147,969 B. The homepage still initially loads neither Recharts nor Leaflet. Two self-hosted browser fonts total 44,800 B; the server-only share-image TTF is separate. The old zero-font-request assertion was replaced with a bounded same-origin check. The browser regression still checks reserved chart height, JS budgets, deferred map CSS and layout shift below 0.01. Text stays opaque during entry movement to preserve contrast at every animation frame.
+
+NOW reuses one engine evaluation across activity windows. Collection metadata adds two bounded read queries on migrated databases; no N+1 source query is introduced. Enrichment recovery now validates first and persists one bounded SQL batch rather than issuing per-item network requests. Cached reads older than 30 seconds attempt a direct database refresh. See [the release review](city-signal-release.md) for current contracts, evidence and limitations. The previous performance pass below is historical; its zero-font and unchanged-contract statements describe that earlier release.

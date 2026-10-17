@@ -35,3 +35,10 @@ Related signals come from a different canonical topic sharing the supported sema
 Route-level loading uses a stable skeleton. Missing/malformed topics have an archive-specific not-found page. Known storage failures provide a safe retry using a server router refresh; unexpected errors have a route boundary with the same recovery controls. Neither displays raw diagnostic text. Empty evidence, absent history, missing stages, old records and uncertain places have explicit states.
 
 Tests cover evidence-only explanations, location consistency and dedupe/display limits, archival version isolation, missing stages, absent evidence, unsafe title escaping, original links, no excerpt reproduction, filters and expansion, chart/table controls, keyboard methodology disclosure, retries, not-found behavior, responsive overflow, hydration and WCAG A/AA checks.
+
+Demo evidence has fictional titles and no outgoing original-source links. Live evidence retains safe original-source links. This applies to both the main evidence list and related signals.
+# City signal edition topic briefs
+
+Topic briefs share the wide editorial grid, self-hosted typography and semantic colour tokens. The title and score have distinct regions; metrics, evidence explanation, location support, chart history, observed milestones, source ledger and expandable scoring stay in a single coherent reading sequence. Mobile recomposes the score beneath the title and keeps chart dimensions usable.
+
+Share trend invokes Web Share when supported, otherwise copies the stable canonical URL. Success/failure feedback is announced through a live status region. Each topic's Open Graph/Twitter metadata points to `/api/og/[slug]`, a server-generated image with real metrics, timestamp and demo/stale labeling. Missing/unreadable topics never receive fabricated share metrics. Operational detail is progressively disclosed rather than occupying a paragraph above the title.

@@ -169,3 +169,6 @@ bengaluru-internet-pulse/
 ├── vercel.json
 └── .gitignore
 ```
+# City signal edition validation — 17 October 2026
+
+`npm run lint` passed with zero warnings; `npm test -- --maxWorkers=1` passed 409 tests in 29 files; `npm run build` passed; all 33 integration/browser tests passed. Two additional targeted chart/performance checks passed after the final peak-annotation correction. Serial local unit execution avoids an intermittent native Windows fork shutdown without skipping tests. Eight requested viewport widths preserve the exact background and have no horizontal overflow. [Release evidence and detailed scope](city-signal-release.md) supersede the earlier validation record below.

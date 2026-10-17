@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1344" viewBox="0 0 1280 1344" role="img" aria-labelledby="title description">
+  <title id="title">Bengaluru Pulse system architecture</title>
+  <desc id="description">GDELT, Bluesky and Hacker News feed independent server-only source adapters. Zod validates source payloads, then URL and content deduplication removes repeated evidence. Pending signals are committed to libSQL before topic canonicalization through the configured OpenAI, xKiro or heuristic provider. The OpenAI default model is gpt-6-luna; API failures fall back only to heuristic. A deterministic Pulse engine assigns scores, rank, trend confidence and lifecycle. Topic assignments, engine evaluation, snapshots, health and provenance publish in one transaction to the same Turso/libSQL database. Vercel hosts a separate Next.js read layer that validates stored data and serves public APIs and the Bengaluru Pulse interface. Public reads never trigger ingestion or enrichment. Local demo mode uses explicitly labeled fixtures.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 8 4 0 8Z" fill="#647986"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #19313f; }
+      .eyebrow { font-size: 14px; font-weight: 700; letter-spacing: 1.8px; fill: #126b60; }
+      .heading { font-size: 34px; font-weight: 700; letter-spacing: -0.7px; }
+      .section { font-size: 15px; font-weight: 700; letter-spacing: 1.2px; }
+      .label { font-size: 22px; font-weight: 650; }
+      .body { font-size: 18px; fill: #4b626f; }
+      .note { font-size: 16px; fill: #4b626f; }
+      .step { font-size: 13px; font-weight: 700; letter-spacing: 1.1px; fill: #4b626f; }
+      .card { fill: #fff; stroke: #c6d3d9; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #647986; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; marker-end: url(#arrow); }
+      .bus { fill: none; stroke: #647986; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+      .light { fill: #fff; }
+      .light-muted { fill: #d0e5e8; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="1344" rx="20" fill="#fafcfc"/>
+  <text class="eyebrow" x="80" y="51">BENGALURU PULSE</text>
+  <text class="heading" x="80" y="97">Public evidence. Deterministic momentum.</text>
+  <text class="section" x="80" y="147">PUBLIC INTERNET</text>
+  <text class="note" x="1200" y="147" text-anchor="end">Three independent evidence sources</text>
+
+  <!-- Public sources retain their original links and timestamps. -->
+  <g>
+    <rect class="card" x="80" y="164" width="340" height="84" rx="12"/>
+    <rect x="100" y="184" width="4" height="43" rx="2" fill="#b9652b"/>
+    <text class="label" x="120" y="199">GDELT</text>
+    <text class="body" x="120" y="226">DOC 2.0 · article discovery</text>
+  </g>
+  <g>
+    <rect class="card" x="470" y="164" width="340" height="84" rx="12"/>
+    <rect x="490" y="184" width="4" height="43" rx="2" fill="#b9652b"/>
+    <text class="label" x="510" y="199">Bluesky</text>
+    <text class="body" x="510" y="226">Public AppView · posts</text>
+  </g>
+  <g>
+    <rect class="card" x="860" y="164" width="340" height="84" rx="12"/>
+    <rect x="880" y="184" width="4" height="43" rx="2" fill="#b9652b"/>
+    <text class="label" x="900" y="199">Hacker News</text>
+    <text class="body" x="900" y="226">Algolia · stories</text>
+  </g>
+
+  <!-- Ingestion runs outside the web application's public read path. -->
+  <rect x="48" y="310" width="1184" height="548" rx="16" fill="#f0f4f6" stroke="#c6d3d9" stroke-width="1.5"/>
+  <text class="section" x="80" y="347">01 / SERVER-ONLY INGESTION</text>
+  <text class="note" x="1200" y="347" text-anchor="end">GitHub Actions schedule · CLI · optional protected HTTP</text>
+
+  <path class="bus" d="M250 248V274H1030V248 M640 248V274"/>
+  <path class="flow" d="M250 274H24V432H80"/>
+  <g>
+    <rect class="card" x="80" y="386" width="340" height="92" rx="12"/>
+    <text class="step" x="102" y="410">01 / COLLECT</text>
+    <text class="label" x="102" y="438">Source adapters</text>
+    <text class="body" x="102" y="464">Isolated deadlines + retries</text>
+  </g>
+  <path class="flow" d="M420 432H470"/>
+  <g>
+    <rect class="card" x="470" y="386" width="340" height="92" rx="12"/>
+    <text class="step" x="492" y="410">02 / VALIDATE</text>
+    <text class="label" x="492" y="438">Zod validation</text>
+    <text class="body" x="492" y="464">Payloads · links · timestamps</text>
+  </g>
+  <path class="flow" d="M810 432H860"/>
+  <g>
+    <rect class="card" x="860" y="386" width="340" height="92" rx="12"/>
+    <text class="step" x="882" y="410">03 / DEDUPLICATE</text>
+    <text class="label" x="882" y="438">Evidence identity</text>
+    <text class="body" x="882" y="464">Source IDs · URLs · content</text>
+  </g>
+  <path class="flow" d="M1030 478V510H250V544"/>
+
+  <g>
+    <rect x="80" y="544" width="340" height="140" rx="12" fill="#e9f3f1" stroke="#8ebbb3" stroke-width="1.5"/>
+    <text class="step" x="102" y="570">04 / DURABLE CHECKPOINT</text>
+    <text class="label" x="102" y="601">Pending signals · libSQL</text>
+    <text class="body" x="102" y="630">Persist before enrichment</text>
+    <text class="body" x="102" y="657">Recover unfinished work</text>
+  </g>
+  <path class="flow" d="M420 614H470"/>
+  <g>
+    <rect x="470" y="544" width="340" height="140" rx="12" fill="#fff" stroke="#178477" stroke-width="1.5"/>
+    <text class="step" x="492" y="570">05 / SEMANTIC ENRICHMENT</text>
+    <text class="label" x="492" y="601">Topic canonicalization</text>
+    <text class="body" x="492" y="627">OpenAI · xKiro · heuristic</text>
+    <text class="note" x="492" y="650">OpenAI default: gpt-6-luna</text>
+    <text class="note" x="492" y="673">Validated batches · heuristic fallback</text>
+  </g>
+  <path class="flow" d="M810 614H860"/>
+  <g>
+    <rect x="860" y="544" width="340" height="140" rx="12" fill="#193d4b"/>
+    <text class="step light-muted" x="882" y="570">06 / DETERMINISTIC SCORING</text>
+    <text class="label light" x="882" y="601">Pulse engine</text>
+    <text class="body light-muted" x="882" y="630">Score · rank · confidence · lifecycle</text>
+    <text class="body light-muted" x="882" y="657">Current 2h vs. preceding 2h</text>
+  </g>
+  <path class="flow" d="M1030 684V738"/>
+  <g>
+    <rect class="card" x="80" y="738" width="1120" height="78" rx="12"/>
+    <text class="label" x="102" y="768">Atomic publication</text>
+    <text class="body" x="102" y="796">Canonical topics · topic history · dashboard snapshots · source health + provider provenance</text>
+  </g>
+  <text class="note" x="80" y="839">Assignments, scoring and read-model writes commit together.</text>
+
+  <!-- The pending checkpoint and published read models share this database. -->
+  <path class="flow" d="M640 816V910"/>
+  <text class="note" x="660" y="887">Parameterized writes</text>
+  <g>
+    <rect x="80" y="910" width="1120" height="126" rx="14" fill="#e9f3f1" stroke="#8ebbb3" stroke-width="1.5"/>
+    <path d="M108 944C108 934 146 934 146 944V978C146 988 108 988 108 978Z M108 944C108 954 146 954 146 944 M108 961C108 971 146 971 146 961" fill="none" stroke="#126b60" stroke-width="2"/>
+    <text class="section" x="168" y="942">02 / PERSISTENCE</text>
+    <text class="label" x="168" y="972">Turso / libSQL</text>
+    <text class="note" x="168" y="1001">Same store as pending signals</text>
+    <path d="M470 932V1014 M855 932V1014" stroke="#b8d4ce" stroke-width="1.5"/>
+    <text class="body" x="496" y="950">Evidence + canonical topics</text>
+    <text class="note" x="496" y="979">Original timestamps + source URLs</text>
+    <text class="note" x="496" y="1004">Evidence retained for 14 days</text>
+    <text class="body" x="880" y="950">Snapshots + operations</text>
+    <text class="note" x="880" y="979">Topic history · health · provider runs</text>
+    <text class="note" x="880" y="1004">Snapshot history retained for 30 days</text>
+  </g>
+
+  <!-- Vercel is the web hosting boundary, not a downstream processing stage. -->
+  <rect x="48" y="1090" width="1184" height="182" rx="16" fill="#f0f4f6" stroke="#c6d3d9" stroke-width="1.5"/>
+  <text class="section" x="80" y="1126">03 / WEB APPLICATION · VERCEL</text>
+  <text class="note" x="1200" y="1126" text-anchor="end">Server-only reads → browser UI</text>
+  <path class="flow" d="M640 1036V1142H250V1154"/>
+  <g>
+    <rect class="card" x="80" y="1154" width="340" height="86" rx="12"/>
+    <text class="label" x="102" y="1189">Validated read service</text>
+    <text class="note" x="102" y="1217">Atomic batch · 15s server cache</text>
+  </g>
+  <path class="flow" d="M420 1197H470"/>
+  <g>
+    <rect class="card" x="470" y="1154" width="340" height="86" rx="12"/>
+    <text class="label" x="492" y="1189">Next.js pages + public APIs</text>
+    <text class="note" x="492" y="1217">Zod DTOs · freshness checks</text>
+  </g>
+  <path class="flow" d="M810 1197H860"/>
+  <g>
+    <rect class="card" x="860" y="1154" width="340" height="86" rx="12"/>
+    <text class="label" x="882" y="1189">Bengaluru Pulse UI</text>
+    <text class="note" x="882" y="1217">Dashboard · topic briefs · hotspots</text>
+  </g>
+  <text class="note" x="80" y="1259">Public reads never trigger ingestion or enrichment. Missing, stale and degraded live coverage remains visible.</text>
+  <text class="note" x="80" y="1314">Local demo: labeled fixtures, heuristic processing and no accounts. Live reads never substitute demo evidence.</text>
+</svg>

@@ -65,6 +65,10 @@ test("history, accessible data tables, neighborhood exploration and evidence exp
   await expect(chart.locator(".recharts-line-curve")).toBeVisible();
   const plot = await chart.locator(".momentum-chart").boundingBox();
   if (!plot) throw new Error("Score chart did not render");
+  const peak = await chart.getByText("Peak 95", { exact: true }).boundingBox();
+  if (!peak) throw new Error("Peak annotation did not render");
+  expect(peak.x).toBeGreaterThanOrEqual(plot.x);
+  expect(peak.x + peak.width).toBeLessThanOrEqual(plot.x + plot.width);
   await page.mouse.move(plot.x + plot.width * 0.75, plot.y + plot.height * 0.5);
   await expect(chart.locator(".recharts-tooltip-wrapper")).toBeVisible();
   await chart.getByText("View score history as a table", { exact: true }).click();

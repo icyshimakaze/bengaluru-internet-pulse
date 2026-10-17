@@ -40,3 +40,8 @@ Successful publication returns the validated completed run counters and actual r
 Items older than 14 days by publication/discovery time are deleted. Topic history and dashboard snapshots older than 30 days by capture time are deleted. Completed ingestion runs are retained for 30 days; unfinished runs are preserved for recovery. Topics remain while retained items or snapshots reference them. Pruning uses an injected UTC clock and retains exact cutoff-boundary records.
 
 `npm run db:seed` creates fictional fixtures in a separate local database at `.data/seed.db`; it does not use the live database environment setting. Seeded rows and snapshots carry fixture/demo markers and are excluded by default from live queries. Re-running with the same fixture clock is idempotent. No remote database is seeded.
+# Migration 0007: independent collection checkpoints
+
+`source_collections` stores one validated record per source/dataset, independently from atomic topic/snapshot publication. It preserves last attempt/success/item/error timestamps, accepted count and a sanitized error code. Migration backfills known historical success from existing runs, so an initial failed post-upgrade poll cannot erase recent successful coverage. A successful empty poll advances success without advancing the last-item timestamp. Public reads tolerate the table not yet existing and never migrate.
+
+The local recovery path remains bounded: at most 30 selected-provider candidates plus a 500-item heuristic pass. All assignment validation precedes batched writes inside the existing snapshot transaction; no invalid half-batch can publish. No prior migration checksum or historical mock provenance was changed.

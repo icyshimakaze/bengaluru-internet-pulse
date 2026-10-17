@@ -103,3 +103,10 @@ npm run lint
 npm test
 npm run build
 ```
+# Observed scheduling gap, 17 October 2026
+
+Public run history showed successful scheduled invocations at 00:32, 05:02, 09:27 and 13:16 UTC on 17 October, despite the configured `17,47 * * * *` schedule. The latest job's setup, database configuration check, installation and ingestion steps all succeeded. Production health matched that run and reported a healthy database, a failed GDELT collection, partial Bluesky coverage and successful HN collection. This establishes a real scheduler/collection gap; it does not establish missing GitHub secrets. A direct GDELT probe returned HTTP 429. xKiro fallback was recorded, but private provider logs and secret settings were not accessible in the local workspace.
+
+The existing UTC schedule, non-cancelling ingestion concurrency, pinned actions and server-only secrets remain intact. Increasing a cron frequency would not guarantee timely delivery from a delayed external scheduler, so the interface keeps real timestamps and aging thresholds. No paid scheduler or new account is required for the demo. When GitHub scheduling is delayed, an authorized maintainer can use **Actions → Ingest public signals → Run workflow**; choose repository configuration or the existing heuristic override. The worker runs migration 0007 automatically before collection. Web reads tolerate the pre-migration database and never run migrations themselves.
+
+After deployment and the next successful worker run, inspect `/api/health` source `lastSuccessAt` values, then `/api/pulse?window=now`. Verify source checkpoints independently from snapshot/enrichment state. A real ongoing upstream outage must remain visible. The `check_configuration` dispatch input still reports presence only; never paste secret values into logs or issue reports.

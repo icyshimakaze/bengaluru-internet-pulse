@@ -61,3 +61,8 @@ The dashboard links to public source pages rather than republishing complete art
 Endpoint behavior and coverage may change. Source health is displayed alongside every snapshot.
 
 Each poll records a durable ingestion run per source: discovered raw records, actual inserted distinct items, duplicate valid records, rejected/network errors and terminal status. Valid irrelevant and unclassified items are retained with explicit enrichment state; they cannot contribute to rankings. Failed publications roll back item inserts and snapshots and separately mark started runs failed. Expired unfinished runs are recovered as abandoned when the collector next obtains the lease.
+# Collection health in the city signal edition
+
+Migration 0007 stores per-source collection attempts independently of enrichment and publication. Source health uses last successful collection, never the number of items in the selected window. Empty successful polls remain Live. `lastItemAt` preserves the latest observed source timestamp across repeated/empty polls; it does not advance merely because the worker polled again.
+
+A 401, 403 or 429 opens a circuit for the remaining queries of that source in the current poll. Previously returned evidence survives, failed-query counts remain explicit, and other sources continue. Existing per-host pacing, bounded HTTP retries and the 35-second source deadline are retained. The circuit resets next poll and does not bypass upstream restrictions. A direct GDELT probe during the 17 October audit returned HTTP 429; no replacement evidence was fabricated.

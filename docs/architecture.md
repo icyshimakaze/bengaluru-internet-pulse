@@ -8,17 +8,9 @@ The dashboard answers what is accelerating across Bengaluru, using independently
 
 ## Pipeline
 
-```text
-GDELT / Bluesky public AppView / Hacker News Algolia
-  → deadline + bounded retry → Zod payload validation
-  → normalized observations with source, URL, text and publication time
-  → URL/content dedupe → durable pending libSQL items
-  → batched semantic enrichment (OpenAI / xKiro / heuristic)
-  → canonical topics + validated assignments + per-source ingestion runs
-  → deterministic rolling-window engine
-  → atomic, versioned snapshots + source health
-  → server read service → Next.js APIs → responsive UI
-```
+[![Bengaluru Pulse system architecture, from three public sources through server-only ingestion, durable pending signals, validated topic canonicalization and deterministic scoring to atomic Turso persistence and the Vercel-hosted Next.js read layer](assets/architecture.svg)](assets/architecture.svg)
+
+The pending checkpoint and published read models use the same Turso/libSQL database. Topic assignments, deterministic engine evaluation and snapshot publication share a transaction. OpenAI's default model is `gpt-6-luna`; provider selection remains configurable, and API failures fall back only to the heuristic. Vercel hosts the web application; scheduled ingestion runs separately in GitHub Actions. Local development can use file-backed libSQL, while the unconfigured demo uses clearly labeled fixtures without accounts.
 
 The orchestrator polls all sources independently. Invalid items are rejected individually. Upstream outages reduce coverage rather than replacing evidence. Ingestion is an explicit CLI or authenticated scheduled endpoint, never a read-side effect.
 
@@ -88,3 +80,12 @@ The neighborhood street map uses a single SSR-disabled React Leaflet boundary, c
 Pages, metadata, deterministic scoring and database access remain server-only. Identical dashboard projections are memoized per React request. The 15-second server read cache retains its freshness and database-identity guards; health and HTTP read responses remain uncached. Topic history adds one indexed, snapshot-bounded query to the shared atomic state instead of reloading all observations and assignments. Each response evaluates topic metrics once and reuses indexed maps for identity lookups.
 
 Chart controls, captions and exact-value tables render with the page. A shared client boundary loads Recharts when a fixed-height plot approaches the viewport; the same renderer serves homepage and topic charts. The street map and its Leaflet CSS load only when its disclosure opens. Display labels and geographic constants are independent of Zod; client API validation loads in parallel with the first request and still validates the entire response. Only the narrow chart history projection is serialized as the homepage's initial history. Clock subscriptions are isolated from dashboard, chart, stream and footer renders. Date formatters are reused, and system fonts require no network request. See [Performance audit](performance.md) for measurements and regression coverage.
+# City signal edition reliability changes
+
+Migration 0007 adds one `source_collections` checkpoint per source and dataset. Collection records are committed before semantic enrichment and atomic snapshot publication. A publication failure can therefore coexist with successfully collected source health. The checkpoint retains last attempt/success/item/error timestamps, a sanitized error code, accepted-item count and validated source payload. Successful empty polls advance success but preserve the last item timestamp. Reads tolerate databases that have not yet received migration 0007; they never migrate or collect. Source checkpoints are operational records independent of the atomic published topic/snapshot batch.
+
+Source health derives from collection success: Live ≤45 minutes, Delayed >45–90 minutes, Stale >90 minutes. A partial or failed latest poll is Degraded if a recent success remains available; a failure without recent success is Error. Missing configuration/history is Unavailable. Demo remains explicitly simulated. These thresholds never depend on activity in the selected window. Collection and enrichment appear separately in system status.
+
+Selected API work remains capped at `MAX_AI_ITEMS_PER_RUN` (maximum 30). A separate local-only recovery pass handles at most 500 additional/missing pending items per run, including items whose three API attempts are exhausted. This never constructs another API provider. Every result and assignment still passes schema, evidence and provenance checks. The recovery catalog carries forward newly classified identities; stable persisted IDs replace equivalent temporary proposal IDs. Heuristic batch failures are isolated per item, so a corrupted input cannot strand processable siblings. Unresolved items remain stored and excluded from scoring. Disabled enrichment stays disabled. Run counters permit up to 530 total candidates while preserving a maximum of 30 AI-enriched items and actual per-item model/provider provenance. Historical mock values are unchanged.
+
+The read cache retains its 15-second interval, opaque database key and request memoization. If a cached read is over 30 seconds old, one direct database read attempts to refresh it; a failed read retains the validated snapshot and exposes the delay. No refresh path invokes ingestion. Source-type browsing and topic search operate only on clearly bounded loaded rows.
