@@ -48,8 +48,8 @@ try {
   await writeFile(`${output}/health.json`, JSON.stringify(await health.json(), null, 2));
   if (pulse.topTopics[0]) {
     await page.goto(`${origin}/topic/${pulse.topTopics[0].slug}`, { waitUntil: "networkidle" });
-    if (await page.locator(".snapshot-chart").count()) {
-      await page.locator(".snapshot-chart").scrollIntoViewIfNeeded();
+    if (await page.locator(".snapshot-plot").count()) {
+      await page.locator(".snapshot-plot").scrollIntoViewIfNeeded();
       await page.locator(".recharts-line-curve").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => undefined);
       await page.waitForLoadState("networkidle");
       await page.evaluate(() => scrollTo(0, 0));
