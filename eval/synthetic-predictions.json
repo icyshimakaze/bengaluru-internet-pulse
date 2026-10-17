@@ -1,0 +1,70 @@
+{
+  "kind": "synthetic",
+  "exportedAt": "2026-10-06T10:30:00.000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "dirty": false,
+  "filterRuleVersion": 1,
+  "requestedSize": 6,
+  "predictions": [
+    {
+      "id": "a",
+      "source": "gdelt",
+      "language": "English",
+      "textHash": "7537348a72fbd30ccdae3173b55245070a10b420fa5171c0062fdd2cbcb84029",
+      "eventGroup": "G1",
+      "neighborhood": "Whitefield",
+      "category": "traffic",
+      "filtered": false
+    },
+    {
+      "id": "b",
+      "source": "bluesky",
+      "language": "English",
+      "textHash": "6959ae0dccbaa2d97fe7858853d2829b03887af26d4f34f97179e19245689465",
+      "eventGroup": "G1",
+      "neighborhood": "Whitefield",
+      "category": "weather",
+      "filtered": true
+    },
+    {
+      "id": "c",
+      "source": "rss",
+      "language": "English",
+      "textHash": "0734a943a2467e717d43e981c3cf9fa38cb654fb09910150a6fac26444ae8aca",
+      "eventGroup": "G1",
+      "neighborhood": null,
+      "category": "culture",
+      "filtered": false
+    },
+    {
+      "id": "d",
+      "source": "gdelt",
+      "language": "English",
+      "textHash": "3edc724985a2a66d6798de3cec13d0d9433ffd2e3c26031be3db07a57aa9fa1f",
+      "eventGroup": "G2",
+      "neighborhood": "Indiranagar",
+      "category": "other",
+      "filtered": false
+    },
+    {
+      "id": "e",
+      "source": "bluesky",
+      "language": "English",
+      "textHash": "6aa74ceda05fd904abcee608c8f7691fb575cf4c83bbe4366ca4711cf0e427e3",
+      "eventGroup": "G3",
+      "neighborhood": null,
+      "category": "jobs",
+      "filtered": true
+    },
+    {
+      "id": "f",
+      "source": "hackernews",
+      "language": "English",
+      "textHash": "2dd7e8d5276fa8df006b393d7e4c01d97720174813853d7caed07ccc70670fde",
+      "eventGroup": "G4",
+      "neighborhood": "Whitefield",
+      "category": null,
+      "filtered": false
+    }
+  ]
+}

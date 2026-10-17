@@ -1,0 +1,8 @@
+# SYNTHETIC fixture only. Never project accuracy.
+id,source,language,text,true_event_group,true_neighborhood,true_category,is_spam_or_bot
+a,gdelt,English,SYNTHETIC signal a,event-1,Whitefield,traffic,false
+b,bluesky,English,SYNTHETIC signal b,event-1,Whitefield,traffic,false
+c,rss,English,SYNTHETIC signal c,event-2,Indiranagar,culture,false
+d,gdelt,English,SYNTHETIC signal d,event-2,Indiranagar,culture,false
+e,bluesky,English,SYNTHETIC signal e,spam-1,none,jobs,true
+f,hackernews,English,SYNTHETIC signal f,spam-2,none,other,true

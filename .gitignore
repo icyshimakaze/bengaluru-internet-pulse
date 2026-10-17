@@ -12,3 +12,5 @@ artifacts/
 !.env.example
 *.tsbuildinfo
 .vercel/
+eval/labels.csv
+eval/predictions.json

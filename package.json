@@ -18,7 +18,10 @@
     "ingest": "tsx --conditions=react-server scripts/ingest.ts",
     "audit:data": "tsx --conditions=react-server scripts/audit-data.ts",
     "db:migrate": "tsx --conditions=react-server scripts/migrate.ts",
-    "db:seed": "tsx --conditions=react-server scripts/seed.ts"
+    "db:seed": "tsx --conditions=react-server scripts/seed.ts",
+    "eval:sample": "tsx --conditions=react-server scripts/eval-sample.ts",
+    "eval": "tsx --conditions=react-server scripts/eval.ts",
+    "backtest": "tsx --conditions=react-server scripts/backtest.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
