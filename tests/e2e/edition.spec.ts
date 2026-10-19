@@ -105,6 +105,28 @@ test("older wider-window conversations never become a scored lead", async ({ pag
   await expect(page.locator(".window-explanation")).toContainText("2H is quiet");
 });
 
+test("sparse evidence exposes actual diagnostic Pulse Scores without becoming a lead", async ({ page, request }) => {
+  const stored = await (await request.get("/api/pulse")).json();
+  const early = { ...stored.topTopics[0], current2h: 1, activityCount: 1, score: 20, confidence: 0.24, lifecycle: "NEW" };
+  await page.goto("/");
+  await page.route("**/api/pulse?**", (route) => route.fulfill({ json: { ...stored,
+    topTopics: [], risingTopics: [], recentConversations: [], diagnosticTopics: [early] } }));
+  await page.getByRole("button", { name: "Refresh pulse" }).click();
+  const scores = page.getByRole("region", { name: "Pulse Scores · early signals" });
+  await expect(scores).toContainText("20");
+  await expect(scores).toContainText("1 signal / 2H · 24% confidence");
+  await expect(scores).toContainText("below the lead threshold");
+  await expect(page.locator(".lead-topic")).toHaveCount(0);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
+  }
+  await scores.screenshot({ path: ".cache/release/diagnostic-scores.png" });
+  await scores.getByRole("link", { name: early.title }).click();
+  await expect(page).toHaveURL(new RegExp(`/topic/${early.slug}$`));
+});
+
 test("status page separates collection and enrichment with one masthead and footer links", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("banner")).toHaveCount(1);

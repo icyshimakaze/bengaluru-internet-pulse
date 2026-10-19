@@ -2,6 +2,8 @@
 
 Portfolio evidence update: optional RSS shares the news channel with GDELT/Currents. Up to five provider labels still produce exactly three scoring channels. Content-rule-filtered items (including Jobs) are retained but excluded before the unchanged deterministic equation. No weights, component equations, caps, confidence or lifecycle thresholds changed, and historical snapshots are preserved. Neighborhood coordinate eligibility affects only maps. See [sources](data-sources.md) for filter limitations and [evaluation](evaluation.md) for pending human measurement.
 
+Sparse-topic diagnostics: the dashboard now exposes actual below-threshold topic scores separately from the lead ranking, ordered by latest evidence. These use the same engine evaluation as topic detail: one current signal is capped at 20 and zero current signals score zero. Wider activity windows never extend the two-hour scoring window. See the additive `diagnosticTopics` [read contract](read-api.md).
+
 The engine measures momentum from distinct public signals. An injected UTC clock and fixed equations determine every metric, score, confidence, lifecycle and tie. OpenAI/mock classification confidence is never a scoring input. Pending, failed and irrelevant items are excluded.
 
 ## Evidence and time windows

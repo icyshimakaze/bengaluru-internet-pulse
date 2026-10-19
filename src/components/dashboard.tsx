@@ -16,6 +16,7 @@ import { SourceStream } from "./source-stream";
 import { leadEligible } from "@/lib/trends/lead-eligibility";
 import { ReadingHelp } from "./reading-help";
 import { RecentConversations } from "./recent-conversations";
+import { ScoreDiagnostics } from "./score-diagnostics";
 import { usePublishPulse, usePulseStatus } from "./pulse-context";
 
 function SnapshotAge({ generatedAt }: { generatedAt: string | null }) {
@@ -131,6 +132,7 @@ export function Dashboard({ initialPulse, initialDetail }: { initialPulse: Dashb
       <ReadingHelp /><p className="scoring-footnote">Scores compare successive 2h windows. Confidence is measured separately.<Link href="/about#scoring">How scoring works ↗</Link></p>
     </section><CityBriefing pulse={pulse} /></div>
     <RecentConversations conversations={pulse.recentConversations} query={query} demo={pulse.mode === "demo"} fallback={!hasCurrentMomentum} />
+    <ScoreDiagnostics topics={pulse.diagnosticTopics} query={query} />
     {(pulse.mode === "demo" || pulse.totalSignals > 0) && <div className="city-intelligence"><MomentumChart topics={shown} initialDetail={initialDetail} mode={pulse.mode} capturedAt={pulse.generatedAt} /><Neighborhoods hotspots={pulse.hotspots} window={pulse.window} mode={pulse.mode} /></div>}
     <SourceStream pulse={pulse} />
   </div>;

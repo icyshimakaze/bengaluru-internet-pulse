@@ -63,6 +63,8 @@ Missing provider credentials, authentication/access failures, rate limits, upstr
 
 ## Delivery and operations
 
+Scheduled-start continuity: the public-repository Actions worker now keeps a bounded five-hour collection loop, polling every 30 minutes between delayed cron starts. It uses the existing one-shot remote CLI per poll, with three-minute process deadlines, read-only revision checks, graceful release handoff and unchanged database leases. Private/local operation stays one-shot. See [scheduler behavior and limits](scheduled-ingestion.md). Public reads remain side-effect free.
+
 Next.js, strict TypeScript, Tailwind, shadcn/ui primitives, Lucide, Recharts, React Leaflet, Zod, libSQL, Vitest, GitHub Actions and Vercel. Public routes: `/api/pulse`, `/api/topics`, `/api/topics/[slug]`, `/api/hotspots`, `/api/health`. Operational route: `GET /api/ingest`, protected by `CRON_SECRET` for authenticated operators; CLI: `npm run ingest`. Production scheduling uses GitHub Actions, not Vercel cron; see [Scheduled ingestion](scheduled-ingestion.md).
 
 Structured logs contain counts, durations, source and error codes, never API keys or raw posts. CI runs lint, tests, type checks and production build without live secrets or upstream dependencies.

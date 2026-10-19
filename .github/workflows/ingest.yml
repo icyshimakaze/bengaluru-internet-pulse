@@ -17,6 +17,11 @@ on:
         required: false
         default: false
         type: boolean
+      one_shot:
+        description: "Collect once instead of keeping the public-repository collector active"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "17,47 * * * *"
 permissions:
@@ -28,7 +33,7 @@ jobs:
   ingest:
     name: Check configuration and ingest when ready
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 315
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -55,8 +60,12 @@ jobs:
       - name: Collect, enrich and publish momentum
         id: ingest
         if: steps.configuration.outputs.should_ingest == 'true'
-        timeout-minutes: 3
+        timeout-minutes: 305
         env:
+          # Only public repositories keep a standard runner between collections.
+          INGEST_CONTINUOUS: ${{ github.event.repository.visibility == 'public' && inputs.one_shot != true }}
+          REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
+          GITHUB_TOKEN: ${{ github.token }}
           # Secret values never enter dependency installation or action setup.
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
@@ -76,7 +85,7 @@ jobs:
           AI_BATCH_SIZE: ${{ vars.AI_BATCH_SIZE || '10' }}
           MAX_AI_ITEMS_PER_RUN: ${{ vars.MAX_AI_ITEMS_PER_RUN || '30' }}
           SOURCE_TIMEOUT_MS: "8000"
-        run: npm run ingest -- --require-remote
+        run: npm run ingest:watch
       - name: Report unsuccessful job
         if: failure()
         run: |

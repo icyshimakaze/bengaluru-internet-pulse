@@ -197,6 +197,13 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || a.id.localeCompare(b.id));
   const visible = state.snapshot ? candidates : [];
   const rankedSlugs = new Set(visible.filter((t) => leadEligible(t.public)).map((t) => t.public.slug));
+  const diagnosticTopics = (state.snapshot ? baseMetrics : [])
+    .filter((t) => !rankedSlugs.has(t.public.slug) && t.public.semanticCategory !== "jobs" && categoryMatches(t.public, query.category))
+    .map((t) => { const evidence = selected(t.evidence, query, now); return { topic: t.public, evidence,
+      latestAt: evidence.reduce((latest, o) => o.publishedAt > latest ? o.publishedAt : latest, "") }; })
+    .filter((t) => t.evidence.length > 0)
+    .sort((a, b) => b.latestAt.localeCompare(a.latestAt) || a.topic.slug.localeCompare(b.topic.slug))
+    .slice(0, 4).map((t) => t.topic);
   // Singleton and quieter conversations remain discoverable without entering
   // the momentum ranking or receiving a fabricated popularity measure.
   const recentConversations = (state.snapshot ? baseMetrics : [])
@@ -213,7 +220,7 @@ export function projectDashboard(state: ReadState, requested: DashboardQuery, no
     notice, enrichment: state.snapshot?.enrichment,
     window: query.window, requestedWindow: requested.window, filters: { category: query.category ?? null, source: query.source ?? null }, snapshot,
     topTopics: visible.slice(0, 50).map((t) => t.public), risingTopics: visible.filter((t) => ["HOT", "RISING", "EMERGING"].includes(t.public.lifecycle)).slice(0, 50).map((t) => t.public),
-    recentConversations, topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, topicsById)),
+    recentConversations, diagnosticTopics, topicsTruncated: visible.length > 50, sourceStream: stream.slice(0, 30).map((o) => publicSignal(byId.get(o.id)!, topicsById)),
     signalCount: stream.length, streamTruncated: stream.length > 30, sources: sourceStatuses, availableSources: available(sourceStatuses),
     lastSuccessfulIngestion: state.mode === "demo" ? null : state.lastSuccessfulIngestion?.finishedAt ?? null,
     hotspots: hotspotRows(state.snapshot ? metrics.filter((t) => categoryMatches(t.public, query.category)) : [], query, now) });

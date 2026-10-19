@@ -11,14 +11,14 @@ export const LIVE_FRESHNESS_MS = 45 * 60_000;
 export function emptyDashboardState(pulse: DashboardData, filtered: boolean) {
   if (pulse.mode === "live" && (!pulse.generatedAt || pulse.status === "unavailable" || pulse.stale || pulse.snapshot.refreshDelayed || !pulse.availableSources.length)) {
     return { eyebrow: "COLLECTION DELAYED", title: pulse.generatedAt ? "Waiting for fresh evidence" : "Waiting for a pulse",
-      description: "Recent source coverage is missing or delayed. There is not enough fresh evidence to say what is rising across the city." };
+      description: "Collection is delayed. Pulse Scores still use the latest two hours, so older evidence can age to zero. Retained observations and their scores remain below; refreshing this page only reads stored data." };
   }
   if (filtered) return { eyebrow: "THIS SELECTION", title: "No matching conversations",
     description: "No topics meet the evidence threshold for this selection. Try another category, a wider window or clear the filters." };
   if (pulse.mode === "live" && pulse.status === "degraded") return { eyebrow: "LIMITED COVERAGE", title: "No trend meets the evidence threshold",
-    description: "Only part of the public-source coverage is available. A topic needs at least two distinct recent signals to enter the ranking." };
+    description: "Only part of the public-source coverage is available. The lead needs two distinct signals in the latest two hours and at least 35% confidence. Early-signal Pulse Scores are shown below." };
   return { eyebrow: "A QUIET WINDOW", title: "No trend meets the evidence threshold",
-    description: "No topic has enough distinct recent evidence to enter the ranking. Try a wider activity window or check again after the next collection." };
+    description: "The lead needs two distinct signals in the latest two hours and at least 35% confidence. Early-signal Pulse Scores are shown below when observations exist. Wider windows show more evidence; they keep the same two-hour score." };
 }
 export const categoryLabels: Record<PublicTopic["semanticCategory"], string> = {
   civic: "Civic", traffic: "Traffic", technology: "Tech", business: "Business", culture: "Culture",

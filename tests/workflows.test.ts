@@ -7,7 +7,7 @@ const step = z.object({ name: z.string().optional(), id: z.string().optional(), 
   if: z.string().optional(), env: z.record(z.string(), z.string()).optional(), "timeout-minutes": z.number().optional() });
 const workflowSchema = z.object({ on: z.object({ schedule: z.array(z.object({ cron: z.string() })),
   workflow_dispatch: z.object({ inputs: z.object({ enrichment_provider: z.object({ default: z.string(), type: z.string(), options: z.array(z.string()) }),
-    check_configuration: z.object({ default: z.boolean(), type: z.string() }) }) }) }),
+    check_configuration: z.object({ default: z.boolean(), type: z.string() }), one_shot: z.object({ default: z.boolean(), type: z.string() }) }) }) }),
   permissions: z.object({ contents: z.string() }), concurrency: z.object({ group: z.string(), "cancel-in-progress": z.boolean() }),
   jobs: z.object({ ingest: z.object({ "runs-on": z.string(), "timeout-minutes": z.number(), env: z.record(z.string(), z.string()).optional(), steps: z.array(step) }) }) });
 const source = readFileSync(".github/workflows/ingest.yml", "utf8"), document = parseDocument(source);
@@ -23,7 +23,7 @@ describe("production ingestion workflow", () => {
     expect(workflow.concurrency.group).toBe("pulse-production-ingestion");
     expect(workflow.concurrency["cancel-in-progress"]).toBe(false);
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(workflow.jobs.ingest["timeout-minutes"]).toBeLessThanOrEqual(10);
+    expect(workflow.jobs.ingest["timeout-minutes"]).toBe(315); // Bounded below the six-hour hosted-runner limit.
     for (const s of workflow.jobs.ingest.steps.filter((s) => s.uses)) expect(s.uses).toMatch(/^actions\/(checkout|setup-node)@[a-f0-9]{40}$/);
   });
   it("checks setup before dependency installation and gates collection on its explicit output", () => {
@@ -39,8 +39,12 @@ describe("production ingestion workflow", () => {
   it("scopes secrets to the setup check and real ingestion, which requires persistent remote storage", () => {
     const job = workflow.jobs.ingest, ingest = job.steps.find((s) => s.id === "ingest")!;
     expect(job.env).toBeUndefined();
-    expect(ingest.run).toBe("npm run ingest -- --require-remote");
-    expect(ingest["timeout-minutes"]).toBe(3);
+    expect(ingest.run).toBe("npm run ingest:watch");
+    expect(ingest["timeout-minutes"]).toBe(305);
+    expect(ingest.env?.INGEST_CONTINUOUS).toBe("${{ github.event.repository.visibility == 'public' && inputs.one_shot != true }}");
+    expect(ingest.env?.REPOSITORY_VISIBILITY).toBe("${{ github.event.repository.visibility }}");
+    expect(ingest.env?.GITHUB_TOKEN).toBe("${{ github.token }}");
+    expect(workflow.on.workflow_dispatch.inputs.one_shot).toEqual({ default: false, type: "boolean" });
     for (const name of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "OPENAI_API_KEY", "XKIRO_API_KEY", "CURRENTS_API_KEY"]) expect(ingest.env?.[name]).toBe("${{ secrets." + name + " }}");
     expect(ingest.env?.CURRENTS_ENABLED).toBe("auto");
     const config = job.steps.find((s) => s.id === "configuration")!;
