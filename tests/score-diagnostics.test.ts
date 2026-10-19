@@ -51,4 +51,13 @@ describe("inspectable scores below the lead threshold", () => {
     const old = Object.fromEntries(Object.entries(data).filter(([key]) => key !== "diagnosticTopics"));
     expect(dashboardSchema.parse(old).diagnosticTopics).toEqual([]);
   });
+  it("excludes a previously misclassified hiring advertisement on read while retaining it in Jobs", () => {
+    const { state, item } = singleton();
+    item.title = "Synthetic company is hiring Principal Engineer / CTO — competitive package, WFO Bengaluru";
+    item.excerpt = item.title;
+    const data = projectDashboard(state, { window: "now" }, now);
+    expect(data.diagnosticTopics).toEqual([]); expect(data.topTopics).toEqual([]);
+    expect(data.sourceStream[0]).toMatchObject({ filterReason: "job_posting", observedCategory: "jobs" });
+    expect(projectDashboard(state, { window: "24h", category: "jobs" }, now).sourceStream).toHaveLength(1);
+  });
 });

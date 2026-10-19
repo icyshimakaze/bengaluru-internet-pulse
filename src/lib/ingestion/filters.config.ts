@@ -25,7 +25,12 @@ export function filterSignal(input: { title: string; excerpt: string; canonicalU
         || (host === "linkedin.com" || host.endsWith(".linkedin.com")) && url.pathname.startsWith("/jobs/");
     } catch { return false; }
   });
-  if (jobLink || /#(?:aijobs|hiring|jobopening|jobopenings|jobsinbangalore)\b|\b(?:we(?:'re| are) hiring|job vacancies|job opening|apply for this job|job\s+\d{3,})\b/iu.test(text)) return "job_posting";
+  // Company-name recruiting posts often omit both hashtags and job-board links.
+  // Require an advertised role plus an application/work-arrangement/pay cue;
+  // reporting on hiring trends alone is not a job advertisement.
+  const advertisedRole = /\bhiring\b[\s:–-]+(?:(?:a|an|for|principal|senior|staff|lead|junior|software|data|product|full[- ]stack|frontend|backend|ai|ml)\s+){0,4}(?:engineers?|developers?|designers?|analysts?|scientists?|managers?|architects?|cto|interns?|recruiters?)\b/iu.test(text)
+    && /\b(?:apply|wfo|wfh|full[ -]time|part[ -]time|salary|package|lpa|ctc)\b/iu.test(text);
+  if (jobLink || advertisedRole || /#(?:aijobs|hiring|jobopening|jobopenings|jobsinbangalore)\b|\b(?:we(?:'re| are) hiring|job vacancies|job opening|apply for this job|job\s+\d{3,})\b/iu.test(text)) return "job_posting";
   if (/#weatherbot\b|\bautomated weather (?:update|report)\b|\bweather (?:update|report)\b[\s\S]*\bhumidity\b[\s\S]*\bwind\b/iu.test(text)) return "weather_bot";
   // Title and excerpt often repeat. Count the substantive body once.
   const body = input.excerpt.includes(input.title) ? input.excerpt : text;

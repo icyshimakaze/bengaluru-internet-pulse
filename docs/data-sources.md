@@ -1,5 +1,7 @@
 # Data sources
 
+Recruitment rule correction, 19 October 2026: company-name posts that advertise a specific role after “hiring” and include an application, work-arrangement or pay cue (for example apply, WFO or package) are retained as `job_posting`, including posts without hashtags or job-board links. Ordinary reporting on hiring trends does not satisfy the rule. The read layer also rechecks retained evidence, so a previously misclassified advertisement is excluded from lead and diagnostic scores before the next worker persists its filter reason. Jobs remain browseable through the Jobs category. Scoring equations and historical snapshots are unchanged.
+
 ## Portfolio readiness update — 18 October 2026
 
 RSS/Atom is an optional fifth provider (`rss`, news channel), enabled with worker `RSS_ENABLED=true` after the author reviews reuse permissions. The demo and default worker need no new account or key. Feed configuration is in `src/lib/sources/feeds.config.ts`. Both entries have **terms status: unchecked**; HTTP reachability and robots permission do not establish reuse rights. Publishers also list restrictions for several AI crawlers; review whether the intended classification/publication use is permitted before activation. The default stays off pending that review.

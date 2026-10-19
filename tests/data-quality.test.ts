@@ -13,6 +13,10 @@ import { now, observation } from "./helpers";
 describe("retained, configurable noise rules", () => {
   it.each([
     ["Bengaluru #AIJobs #Hiring software engineer", "job_posting"],
+    ["Synthetic company is hiring Principal Engineer / CTO — competitive package, WFO Bengaluru", "job_posting"],
+    ["Bengaluru startup hiring a software developer: apply by Friday", "job_posting"],
+    ["Bengaluru startup hiring 200 engineers as new campus opens", null],
+    ["Bengaluru engineers discuss WFO policy and hiring trends", null],
     ["Bengaluru automated weather report temperature humidity wind", "weather_bot"],
     ["Bengaluru #a #b #c #d #e #f #g #h", "hashtag_spam"], ["!! https://example.org/a", "near_empty"],
     ["BBMP water cut in Bengaluru", null], ["Cricket rain washout in Bengaluru", null],
